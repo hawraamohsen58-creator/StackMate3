@@ -1,31 +1,32 @@
-import os
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pymongo import MongoClient
 from bson import ObjectId
+import os
 
 app = FastAPI()
 
 # ===============================
-# Database
+# MongoDB
 # ===============================
-MONGO_URI = os.getenv("MONGO_URI") or "mongodb+srv://hawraawaleed33_db_user:VyTQdtnppS9lT0RK@cluster0.jeyjiot.mongodb.net/developers_db?retryWrites=true&w=majority"
+MONGO_URI = os.getenv("MONGO_URI")
 
 client = MongoClient(MONGO_URI)
 db = client.get_database()
 
 developers_collection = db["developers"]
-follows_collection = db["follows"]
 projects_collection = db["projects"]
 videos_collection = db["videos"]
 shorts_collection = db["shorts"]
+follows_collection = db["follows"]
 
 # ===============================
-# Static Files
+# Videos Folder
 # ===============================
 app.mount("/videos", StaticFiles(directory="videos"), name="videos")
 
+# ⚠️ حطي رابط السيرفر مالج هنا
 URL_BASE = "https://stackmate3.onrender.com"
 
 # ===============================
@@ -42,11 +43,6 @@ class Developer(BaseModel):
     technologies: str = ""
     portfolio: str = ""
 
-class Follow(BaseModel):
-    follower: str
-    following: str
-    status: str = "pending"
-
 class Project(BaseModel):
     developer_id: str
     title: str
@@ -60,37 +56,36 @@ class Project(BaseModel):
 class Video(BaseModel):
     developer_id: str
     title: str
-    url: str
-    thumbnail: str = ""
-    description: str = ""
-    views: int = 0
-    developer_name: str = ""
-    developer_avatar: str = ""
+    url: str  # اسم الملف مثل hm6.mp4
 
 class Short(BaseModel):
     developer_id: str
     title: str
     url: str
-    description: str = ""
-    developer_name: str = ""
-    developer_avatar: str = ""
+
+class Follow(BaseModel):
+    follower: str
+    following: str
+    status: str = "accepted"
 
 # ===============================
-# Helpers
+# ROOT
 # ===============================
-def safe_object_id(id_value: str):
-    try:
-        return ObjectId(id_value)
-    except:
-        raise HTTPException(status_code=400, detail="Invalid ID")
+@app.get("/")
+def home():
+    return {"message": "Server is running ✅"}
+
+@app.get("/health")
+def health():
+    return {"message": "Server is running ✅"}
 
 # ===============================
-# Developers APIs
+# Developers
 # ===============================
 @app.post("/developers")
 def add_developer(dev: Developer):
     developers_collection.insert_one(dev.dict())
-    return {"message": "Developer added successfully"}
+    return {"message": "Developer added"}
 
 @app.get("/developers")
 def get_developers():
@@ -98,7 +93,7 @@ def get_developers():
     result = []
 
     for dev in developers:
-        followers_count = follows_collection.count_documents({
+        followers = follows_collection.count_documents({
             "following": str(dev["_id"]),
             "status": "accepted"
         })
@@ -109,50 +104,36 @@ def get_developers():
             "skill": dev["skill"],
             "bio": dev["bio"],
             "avatar": dev.get("avatar", ""),
-            "followers_count": followers_count
+            "followers_count": followers
         })
 
     return result
 
 @app.get("/developers/search")
-def search_developer(q: str):
-    developers = developers_collection.find({
+def search_developers(q: str):
+    devs = developers_collection.find({
         "$or": [
             {"name": {"$regex": q, "$options": "i"}},
             {"skill": {"$regex": q, "$options": "i"}}
         ]
     })
 
-    result = []
-
-    for dev in developers:
-        followers_count = follows_collection.count_documents({
-            "following": str(dev["_id"]),
-            "status": "accepted"
-        })
-
-        result.append({
-            "id": str(dev["_id"]),
-            "name": dev["name"],
-            "skill": dev["skill"],
-            "bio": dev["bio"],
-            "avatar": dev.get("avatar", ""),
-            "followers_count": followers_count
-        })
-
-    return result
+    return [{
+        "id": str(d["_id"]),
+        "name": d["name"],
+        "skill": d["skill"],
+        "bio": d["bio"],
+        "avatar": d.get("avatar", ""),
+        "followers_count": 0
+    } for d in devs]
 
 @app.get("/developers/{developer_id}")
-def get_developer_by_id(developer_id: str):
-    dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
+def get_developer(developer_id: str):
+    dev = developers_collection.find_one({"_id": ObjectId(developer_id)})
 
     if not dev:
-        raise HTTPException(status_code=404, detail="Developer not found")
+        raise HTTPException(status_code=404, detail="Not found")
 
-    followers_count = follows_collection.count_documents({
-        "following": developer_id,
-        "status": "accepted"
-    })
     return {
         "id": str(dev["_id"]),
         "name": dev["name"],
@@ -164,11 +145,11 @@ def get_developer_by_id(developer_id: str):
         "portfolio": dev.get("portfolio", ""),
         "bio": dev.get("bio", ""),
         "avatar": dev.get("avatar", ""),
-        "followers_count": followers_count
+        "followers_count": 0
     }
 
 # ===============================
-# Projects APIs
+# Projects
 # ===============================
 @app.post("/projects")
 def add_project(project: Project):
@@ -176,45 +157,21 @@ def add_project(project: Project):
     return {"message": "Project added"}
 
 @app.get("/developers/{developer_id}/projects")
-def get_developer_projects(developer_id: str):
-    projects = list(projects_collection.find({"developer_id": developer_id}))
-
-    return [
-        {
-            "id": str(p["_id"]),
-            "developer_id": p["developer_id"],
-            "title": p["title"],
-            "description": p["description"],
-            "url": p["url"],
-            "technologies": p.get("technologies", ""),
-            "image": p.get("image", ""),
-            "status": p.get("status", "successful"),
-            "tips": p.get("tips", "")
-        }
-        for p in projects
-    ]
-
-@app.get("/projects/{project_id}")
-def get_project_by_id(project_id: str):
-    project = projects_collection.find_one({"_id": safe_object_id(project_id)})
-
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    return {
-        "id": str(project["_id"]),
-        "developer_id": project["developer_id"],
-        "title": project["title"],
-        "description": project["description"],
-        "url": project["url"],
-        "technologies": project.get("technologies", ""),
-        "image": project.get("image", ""),
-        "status": project.get("status", "successful"),
-        "tips": project.get("tips", "")
-    }
+def get_projects(developer_id: str):
+    projects = projects_collection.find({"developer_id": developer_id})
+    return [{
+        "id": str(p["_id"]),
+        "title": p["title"],
+        "description": p["description"],
+        "url": p["url"],
+        "technologies": p.get("technologies", ""),
+        "image": p.get("image", ""),
+        "status": p.get("status", "successful"),
+        "tips": p.get("tips", "")
+    } for p in projects]
 
 # ===============================
-# Videos APIs
+# Videos
 # ===============================
 @app.post("/videos")
 def add_video(video: Video):
@@ -222,65 +179,17 @@ def add_video(video: Video):
     return {"message": "Video added"}
 
 @app.get("/developers/{developer_id}/videos")
-def get_developer_videos(developer_id: str):
-    videos = list(videos_collection.find({"developer_id": developer_id}))
+def get_videos(developer_id: str):
+    videos = videos_collection.find({"developer_id": developer_id})
 
-    return [
-        {
-            "id": str(v["_id"]),
-            "developer_id": v["developer_id"],
-            "title": v["title"],
-            "url": f"{URL_BASE}/videos/{v['url']}",
-            "thumbnail": v.get("thumbnail", ""),
-            "description": v.get("description", ""),
-            "views": v.get("views", 0),
-            "developer_name": v.get("developer_name", ""),
-            "developer_avatar": v.get("developer_avatar", "")
-        }
-        for v in videos
-    ]
-
-@app.get("/videos/search")
-def search_videos(q: str = ""):
-    videos = list(videos_collection.find({
-        "title": {"$regex": q, "$options": "i"}
-    }))
-
-    return [
-        {
-            "id": str(v["_id"]),
-            "developer_id": v["developer_id"],
-            "title": v["title"],
-            "url": f"{URL_BASE}/videos/{v['url']}",
-            "thumbnail": v.get("thumbnail", ""),
-            "description": v.get("description", ""),
-            "views": v.get("views", 0),
-            "developer_name": v.get("developer_name", ""),
-            "developer_avatar": v.get("developer_avatar", "")
-        }
-        for v in videos
-    ]
-
-@app.get("/videos/{video_id}")
-def get_video_by_id(video_id: str):
-    video = videos_collection.find_one({"_id": safe_object_id(video_id)})
-
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
-
-    return {
-        "id": str(video["_id"]),
-        "developer_id": video["developer_id"],"title": video["title"],
-        "url": f"{URL_BASE}/videos/{video['url']}",
-        "thumbnail": video.get("thumbnail", ""),
-        "description": video.get("description", ""),
-        "views": video.get("views", 0),
-        "developer_name": video.get("developer_name", ""),
-        "developer_avatar": video.get("developer_avatar", "")
-    }
+    return [{
+        "id": str(v["_id"]),
+        "title": v["title"],
+        "url": f"{URL_BASE}/videos/{v['url']}"
+    } for v in videos]
 
 # ===============================
-# Shorts APIs
+# Shorts
 # ===============================
 @app.post("/shorts")
 def add_short(short: Short):
@@ -288,52 +197,30 @@ def add_short(short: Short):
     return {"message": "Short added"}
 
 @app.get("/developers/{developer_id}/shorts")
-def get_developer_shorts(developer_id: str):
-    shorts = list(shorts_collection.find({"developer_id": developer_id}))
+def get_shorts(developer_id: str):
+    shorts = shorts_collection.find({"developer_id": developer_id})
 
-    return [
-        {
-            "id": str(s["_id"]),
-            "developer_id": s["developer_id"],
-            "title": s["title"],
-            "url": f"{URL_BASE}/videos/{s['url']}",
-            "description": s.get("description", ""),
-            "developer_name": s.get("developer_name", ""),
-            "developer_avatar": s.get("developer_avatar", "")
-        }
-        for s in shorts
-    ]
+    return [{
+        "id": str(s["_id"]),
+        "title": s["title"],
+        "url": f"{URL_BASE}/videos/{s['url']}"
+    } for s in shorts]
 
 # ===============================
-# Follow APIs
+# Follow
 # ===============================
 @app.post("/follow")
 def follow_user(follow: Follow):
     follows_collection.insert_one(follow.dict())
-    return {"message": "Follow request sent"}
+    return {"message": "Followed"}
 
 @app.get("/follow")
-def get_follows():
+def get_follow():
     follows = follows_collection.find()
-    result = []
 
-    for f in follows:
-        result.append({
-            "id": str(f["_id"]),
-            "follower": f["follower"],
-            "following": f["following"],
-            "status": f.get("status", "pending")
-        })
-
-    return result
-
-# ===============================
-# Root
-# ===============================
-@app.get("/")
-def home():
-    return {"message": "Server is running ✅"}
-
-@app.get("/health")
-def health():
-    return {"message": "Server is running ✅"}
+    return [{
+        "id": str(f["_id"]),
+        "follower": f["follower"],
+        "following": f["following"],
+        "status": f["status"]
+    } for f in follows]
