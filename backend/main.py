@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -9,7 +10,7 @@ app = FastAPI()
 # ===============================
 # Database
 # ===============================
-MONGO_URI = "mongodb+srv://hawraawaleed33_db_user:VyTQdtnppS9lT0RK@cluster0.jeyjiot.mongodb.net/developers_db?retryWrites=true&w=majority"
+MONGO_URI = os.getenv("MONGO_URI") or "mongodb+srv://hawraawaleed33_db_user:VyTQdtnppS9lT0RK@cluster0.jeyjiot.mongodb.net/developers_db?retryWrites=true&w=majority"
 
 client = MongoClient(MONGO_URI)
 db = client.get_database()
