@@ -7,7 +7,7 @@ from bson import ObjectId
 app = FastAPI()
 
 # ===============================
-# اتصال قاعدة البيانات عبر MongoDB Atlas
+# Database
 # ===============================
 MONGO_URI = "mongodb+srv://hawraawaleed33_db_user:VyTQdtnppS9lT0RK@cluster0.jeyjiot.mongodb.net/developers_db?retryWrites=true&w=majority"
 
@@ -21,7 +21,14 @@ videos_collection = db["videos"]
 shorts_collection = db["shorts"]
 
 # ===============================
-# Pydantic Models
+# Static Files
+# ===============================
+app.mount("/videos", StaticFiles(directory="videos"), name="videos")
+
+URL_BASE = "https://stackmate3.onrender.com"
+
+# ===============================
+# Models
 # ===============================
 class Developer(BaseModel):
     name: str
@@ -44,26 +51,37 @@ class Project(BaseModel):
     title: str
     description: str
     url: str
+    technologies: str = ""
+    image: str = ""
+    status: str = "successful"
+    tips: str = ""
 
 class Video(BaseModel):
     developer_id: str
     title: str
-    url: str   # اسم ملف الفيديو مثل hm6.mp4
+    url: str
+    thumbnail: str = ""
+    description: str = ""
+    views: int = 0
+    developer_name: str = ""
+    developer_avatar: str = ""
 
 class Short(BaseModel):
     developer_id: str
     title: str
-    url: str   # اسم ملف الشورت مثل short1.mp4
+    url: str
+    description: str = ""
+    developer_name: str = ""
+    developer_avatar: str = ""
 
 # ===============================
-# Serve local videos from "videos" folder
+# Helpers
 # ===============================
-app.mount("/videos", StaticFiles(directory="videos"), name="videos")
-
-# ===============================
-# Base URL للفيديوهات
-# ===============================
-URL_BASE = "https://stackmate3.onrender.com"
+def safe_object_id(id_value: str):
+    try:
+        return ObjectId(id_value)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid ID")
 
 # ===============================
 # Developers APIs
@@ -125,10 +143,7 @@ def search_developer(q: str):
 
 @app.get("/developers/{developer_id}")
 def get_developer_by_id(developer_id: str):
-    try:
-        dev = developers_collection.find_one({"_id": ObjectId(developer_id)})
-    except:
-        raise HTTPException(status_code=400, detail="Invalid developer ID")
+    dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
 
     if not dev:
         raise HTTPException(status_code=404, detail="Developer not found")
@@ -137,7 +152,6 @@ def get_developer_by_id(developer_id: str):
         "following": developer_id,
         "status": "accepted"
     })
-
     return {
         "id": str(dev["_id"]),
         "name": dev["name"],
@@ -167,12 +181,36 @@ def get_developer_projects(developer_id: str):
     return [
         {
             "id": str(p["_id"]),
+            "developer_id": p["developer_id"],
             "title": p["title"],
             "description": p["description"],
-            "url": p["url"]
+            "url": p["url"],
+            "technologies": p.get("technologies", ""),
+            "image": p.get("image", ""),
+            "status": p.get("status", "successful"),
+            "tips": p.get("tips", "")
         }
         for p in projects
     ]
+
+@app.get("/projects/{project_id}")
+def get_project_by_id(project_id: str):
+    project = projects_collection.find_one({"_id": safe_object_id(project_id)})
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return {
+        "id": str(project["_id"]),
+        "developer_id": project["developer_id"],
+        "title": project["title"],
+        "description": project["description"],
+        "url": project["url"],
+        "technologies": project.get("technologies", ""),
+        "image": project.get("image", ""),
+        "status": project.get("status", "successful"),
+        "tips": project.get("tips", "")
+    }
 
 # ===============================
 # Videos APIs
@@ -189,11 +227,56 @@ def get_developer_videos(developer_id: str):
     return [
         {
             "id": str(v["_id"]),
+            "developer_id": v["developer_id"],
             "title": v["title"],
-            "url": f"{URL_BASE}/videos/{v['url']}"
+            "url": f"{URL_BASE}/videos/{v['url']}",
+            "thumbnail": v.get("thumbnail", ""),
+            "description": v.get("description", ""),
+            "views": v.get("views", 0),
+            "developer_name": v.get("developer_name", ""),
+            "developer_avatar": v.get("developer_avatar", "")
         }
         for v in videos
     ]
+
+@app.get("/videos/search")
+def search_videos(q: str = ""):
+    videos = list(videos_collection.find({
+        "title": {"$regex": q, "$options": "i"}
+    }))
+
+    return [
+        {
+            "id": str(v["_id"]),
+            "developer_id": v["developer_id"],
+            "title": v["title"],
+            "url": f"{URL_BASE}/videos/{v['url']}",
+            "thumbnail": v.get("thumbnail", ""),
+            "description": v.get("description", ""),
+            "views": v.get("views", 0),
+            "developer_name": v.get("developer_name", ""),
+            "developer_avatar": v.get("developer_avatar", "")
+        }
+        for v in videos
+    ]
+
+@app.get("/videos/{video_id}")
+def get_video_by_id(video_id: str):
+    video = videos_collection.find_one({"_id": safe_object_id(video_id)})
+
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    return {
+        "id": str(video["_id"]),
+        "developer_id": video["developer_id"],"title": video["title"],
+        "url": f"{URL_BASE}/videos/{video['url']}",
+        "thumbnail": video.get("thumbnail", ""),
+        "description": video.get("description", ""),
+        "views": video.get("views", 0),
+        "developer_name": video.get("developer_name", ""),
+        "developer_avatar": video.get("developer_avatar", "")
+    }
 
 # ===============================
 # Shorts APIs
@@ -210,8 +293,12 @@ def get_developer_shorts(developer_id: str):
     return [
         {
             "id": str(s["_id"]),
+            "developer_id": s["developer_id"],
             "title": s["title"],
-            "url": f"{URL_BASE}/videos/{s['url']}"
+            "url": f"{URL_BASE}/videos/{s['url']}",
+            "description": s.get("description", ""),
+            "developer_name": s.get("developer_name", ""),
+            "developer_avatar": s.get("developer_avatar", "")
         }
         for s in shorts
     ]
@@ -240,7 +327,7 @@ def get_follows():
     return result
 
 # ===============================
-# Root Test
+# Root
 # ===============================
 @app.get("/")
 def home():
