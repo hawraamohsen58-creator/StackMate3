@@ -10,9 +10,8 @@ app = FastAPI()
 # ===============================
 # MongoDB Connection
 # ===============================
-MONGO_URI = os.getenv("MONGO_URI")
+MONGO_URI = "mongodb+srv://user:user246810@cluster0.jeyjiot.mongodb.net/?appName=Cluster0"
 
-print("MONGO_URI =", MONGO_URI)
 
 client = MongoClient(MONGO_URI)
 db = client["developers_db"]
