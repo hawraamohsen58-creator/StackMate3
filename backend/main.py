@@ -12,6 +12,8 @@ app = FastAPI()
 # ===============================
 MONGO_URI = os.getenv("MONGO_URI")
 
+print("MONGO_URI =", MONGO_URI)
+
 client = MongoClient(MONGO_URI)
 db = client["developers_db"]
 
