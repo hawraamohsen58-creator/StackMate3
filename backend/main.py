@@ -8,12 +8,12 @@ import os
 app = FastAPI()
 
 # ===============================
-# MongoDB
+# MongoDB Connection
 # ===============================
 MONGO_URI = os.getenv("MONGO_URI")
 
 client = MongoClient(MONGO_URI)
-db = client.get_database()
+db = client["developers_db"]
 
 developers_collection = db["developers"]
 projects_collection = db["projects"]
@@ -22,11 +22,10 @@ shorts_collection = db["shorts"]
 follows_collection = db["follows"]
 
 # ===============================
-# Videos Folder
+# Static Files
 # ===============================
 app.mount("/videos", StaticFiles(directory="videos"), name="videos")
 
-# ⚠️ حطي رابط السيرفر مالج هنا
 URL_BASE = "https://stackmate3.onrender.com"
 
 # ===============================
@@ -56,7 +55,7 @@ class Project(BaseModel):
 class Video(BaseModel):
     developer_id: str
     title: str
-    url: str  # اسم الملف مثل hm6.mp4
+    url: str
 
 class Short(BaseModel):
     developer_id: str
@@ -69,7 +68,16 @@ class Follow(BaseModel):
     status: str = "accepted"
 
 # ===============================
-# ROOT
+# Helper
+# ===============================
+def safe_object_id(value: str):
+    try:
+        return ObjectId(value)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid ID")
+
+# ===============================
+# Root
 # ===============================
 @app.get("/")
 def home():
@@ -93,59 +101,46 @@ def get_developers():
     result = []
 
     for dev in developers:
-        followers = follows_collection.count_documents({
+        followers_count = follows_collection.count_documents({
             "following": str(dev["_id"]),
             "status": "accepted"
         })
 
         result.append({
             "id": str(dev["_id"]),
-            "name": dev["name"],
-            "skill": dev["skill"],
-            "bio": dev["bio"],
+            "name": dev.get("name", ""),
+            "skill": dev.get("skill", ""),
+            "bio": dev.get("bio", ""),
             "avatar": dev.get("avatar", ""),
-            "followers_count": followers
+            "followers_count": followers_count
         })
 
     return result
 
-@app.get("/developers/search")
-def search_developers(q: str):
-    devs = developers_collection.find({
-        "$or": [
-            {"name": {"$regex": q, "$options": "i"}},
-            {"skill": {"$regex": q, "$options": "i"}}
-        ]
-    })
-
-    return [{
-        "id": str(d["_id"]),
-        "name": d["name"],
-        "skill": d["skill"],
-        "bio": d["bio"],
-        "avatar": d.get("avatar", ""),
-        "followers_count": 0
-    } for d in devs]
-
 @app.get("/developers/{developer_id}")
 def get_developer(developer_id: str):
-    dev = developers_collection.find_one({"_id": ObjectId(developer_id)})
+    dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
 
     if not dev:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="Developer not found")
+
+    followers_count = follows_collection.count_documents({
+        "following": developer_id,
+        "status": "accepted"
+    })
 
     return {
         "id": str(dev["_id"]),
-        "name": dev["name"],
+        "name": dev.get("name", ""),
         "job": dev.get("job", ""),
         "location": dev.get("location", ""),
         "experience": dev.get("experience", ""),
-        "skills": dev.get("skill", ""),
+        "skill": dev.get("skill", ""),
         "technologies": dev.get("technologies", ""),
         "portfolio": dev.get("portfolio", ""),
         "bio": dev.get("bio", ""),
         "avatar": dev.get("avatar", ""),
-        "followers_count": 0
+        "followers_count": followers_count
     }
 
 # ===============================
@@ -158,17 +153,20 @@ def add_project(project: Project):
 
 @app.get("/developers/{developer_id}/projects")
 def get_projects(developer_id: str):
-    projects = projects_collection.find({"developer_id": developer_id})
-    return [{
-        "id": str(p["_id"]),
-        "title": p["title"],
-        "description": p["description"],
-        "url": p["url"],
-        "technologies": p.get("technologies", ""),
-        "image": p.get("image", ""),
-        "status": p.get("status", "successful"),
-        "tips": p.get("tips", "")
-    } for p in projects]
+    projects = list(projects_collection.find({"developer_id": developer_id}))
+    return [
+        {
+            "id": str(p["_id"]),
+            "title": p.get("title", ""),
+            "description": p.get("description", ""),
+            "url": p.get("url", ""),
+            "technologies": p.get("technologies", ""),
+            "image": p.get("image", ""),
+            "status": p.get("status", "successful"),
+            "tips": p.get("tips", "")
+        }
+        for p in projects
+    ]
 
 # ===============================
 # Videos
@@ -180,13 +178,21 @@ def add_video(video: Video):
 
 @app.get("/developers/{developer_id}/videos")
 def get_videos(developer_id: str):
-    videos = videos_collection.find({"developer_id": developer_id})
+    videos = list(videos_collection.find({"developer_id": developer_id}))
 
-    return [{
-        "id": str(v["_id"]),
-        "title": v["title"],
-        "url": f"{URL_BASE}/videos/{v['url']}"
-    } for v in videos]
+    result = []
+    for v in videos:
+        dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
+        result.append({
+            "id": str(v["_id"]),
+            "title": v.get("title", ""),
+            "url": f"{URL_BASE}/videos/{v.get('url', '')}",
+            "developer_name": dev.get("name", "") if dev else "",
+            "developer_avatar": dev.get("avatar", "") if dev else "",
+            "views": 0
+        })
+
+    return result
 
 # ===============================
 # Shorts
@@ -198,13 +204,21 @@ def add_short(short: Short):
 
 @app.get("/developers/{developer_id}/shorts")
 def get_shorts(developer_id: str):
-    shorts = shorts_collection.find({"developer_id": developer_id})
+    shorts = list(shorts_collection.find({"developer_id": developer_id}))
 
-    return [{
-        "id": str(s["_id"]),
-        "title": s["title"],
-        "url": f"{URL_BASE}/videos/{s['url']}"
-    } for s in shorts]
+    result = []
+    for s in shorts:
+        dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
+        result.append({
+            "id": str(s["_id"]),
+            "title": s.get("title", ""),
+            "url": f"{URL_BASE}/videos/{s.get('url', '')}",
+            "developer_name": dev.get("name", "") if dev else "",
+            "developer_avatar": dev.get("avatar", "") if dev else "",
+            "likes": 0
+        })
+
+    return result
 
 # ===============================
 # Follow
@@ -217,10 +231,14 @@ def follow_user(follow: Follow):
 @app.get("/follow")
 def get_follow():
     follows = follows_collection.find()
+    result = []
 
-    return [{
-        "id": str(f["_id"]),
-        "follower": f["follower"],
-        "following": f["following"],
-        "status": f["status"]
-    } for f in follows]
+    for f in follows:
+        result.append({
+            "id": str(f["_id"]),
+            "follower": f.get("follower", ""),
+            "following": f.get("following", ""),
+            "status": f.get("status", "accepted")
+        })
+
+    return result
