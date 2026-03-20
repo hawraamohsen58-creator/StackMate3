@@ -41,6 +41,7 @@ class Developer(BaseModel):
     technologies: str = ""
     portfolio: str = ""
 
+
 class Project(BaseModel):
     developer_id: str
     title: str
@@ -51,15 +52,18 @@ class Project(BaseModel):
     status: str = "successful"
     tips: str = ""
 
+
 class Video(BaseModel):
     developer_id: str
     title: str
     url: str
 
+
 class Short(BaseModel):
     developer_id: str
     title: str
     url: str
+
 
 class Follow(BaseModel):
     follower: str
@@ -82,6 +86,7 @@ def safe_object_id(value: str):
 def home():
     return {"message": "Server is running ✅"}
 
+
 @app.get("/health")
 def health():
     return {"message": "Server is running ✅"}
@@ -93,6 +98,7 @@ def health():
 def add_developer(dev: Developer):
     developers_collection.insert_one(dev.dict())
     return {"message": "Developer added"}
+
 
 @app.get("/developers")
 def get_developers():
@@ -115,6 +121,7 @@ def get_developers():
         })
 
     return result
+
 
 @app.get("/developers/search")
 def search_developers(q: str):
@@ -143,6 +150,7 @@ def search_developers(q: str):
         })
 
     return result
+
 
 @app.get("/developers/{developer_id}")
 def get_developer(developer_id: str):
@@ -177,6 +185,7 @@ def add_project(project: Project):
     projects_collection.insert_one(project.dict())
     return {"message": "Project added"}
 
+
 @app.get("/developers/{developer_id}/projects")
 def get_projects(developer_id: str):
     projects = list(projects_collection.find({"developer_id": developer_id}))
@@ -203,14 +212,15 @@ def add_video(video: Video):
     videos_collection.insert_one(video.dict())
     return {"message": "Video added"}
 
+
 @app.get("/developers/{developer_id}/videos")
 def get_videos(developer_id: str):
     videos = list(videos_collection.find({"developer_id": developer_id}))
     result = []
 
-    for v in videos:
-        dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
+    dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
 
+    for v in videos:
         result.append({
             "id": str(v["_id"]),
             "title": v.get("title", ""),
@@ -230,14 +240,15 @@ def add_short(short: Short):
     shorts_collection.insert_one(short.dict())
     return {"message": "Short added"}
 
+
 @app.get("/developers/{developer_id}/shorts")
 def get_shorts(developer_id: str):
     shorts = list(shorts_collection.find({"developer_id": developer_id}))
     result = []
 
-    for s in shorts:
-        dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
+    dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
 
+    for s in shorts:
         result.append({
             "id": str(s["_id"]),
             "title": s.get("title", ""),
@@ -256,6 +267,7 @@ def get_shorts(developer_id: str):
 def follow_user(follow: Follow):
     follows_collection.insert_one(follow.dict())
     return {"message": "Followed"}
+
 
 @app.get("/follow")
 def get_follow():
