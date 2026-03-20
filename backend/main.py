@@ -11,8 +11,6 @@ app = FastAPI()
 # MongoDB Connection
 # ===============================
 MONGO_URI = "mongodb+srv://user:user246810@cluster0.jeyjiot.mongodb.net/?appName=Cluster0"
-
-
 client = MongoClient(MONGO_URI)
 db = client["developers_db"]
 
@@ -118,6 +116,34 @@ def get_developers():
 
     return result
 
+@app.get("/developers/search")
+def search_developers(q: str):
+    developers = developers_collection.find({
+        "$or": [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"skill": {"$regex": q, "$options": "i"}}
+        ]
+    })
+
+    result = []
+
+    for dev in developers:
+        followers_count = follows_collection.count_documents({
+            "following": str(dev["_id"]),
+            "status": "accepted"
+        })
+
+        result.append({
+            "id": str(dev["_id"]),
+            "name": dev.get("name", ""),
+            "skill": dev.get("skill", ""),
+            "bio": dev.get("bio", ""),
+            "avatar": dev.get("avatar", ""),
+            "followers_count": followers_count
+        })
+
+    return result
+
 @app.get("/developers/{developer_id}")
 def get_developer(developer_id: str):
     dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
@@ -129,7 +155,6 @@ def get_developer(developer_id: str):
         "following": developer_id,
         "status": "accepted"
     })
-
     return {
         "id": str(dev["_id"]),
         "name": dev.get("name", ""),
@@ -155,6 +180,7 @@ def add_project(project: Project):
 @app.get("/developers/{developer_id}/projects")
 def get_projects(developer_id: str):
     projects = list(projects_collection.find({"developer_id": developer_id}))
+
     return [
         {
             "id": str(p["_id"]),
@@ -180,10 +206,11 @@ def add_video(video: Video):
 @app.get("/developers/{developer_id}/videos")
 def get_videos(developer_id: str):
     videos = list(videos_collection.find({"developer_id": developer_id}))
-
     result = []
+
     for v in videos:
         dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
+
         result.append({
             "id": str(v["_id"]),
             "title": v.get("title", ""),
@@ -206,10 +233,11 @@ def add_short(short: Short):
 @app.get("/developers/{developer_id}/shorts")
 def get_shorts(developer_id: str):
     shorts = list(shorts_collection.find({"developer_id": developer_id}))
-
     result = []
+
     for s in shorts:
         dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
+
         result.append({
             "id": str(s["_id"]),
             "title": s.get("title", ""),
