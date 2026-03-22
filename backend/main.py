@@ -41,7 +41,6 @@ class Developer(BaseModel):
     technologies: str = ""
     portfolio: str = ""
 
-
 class Project(BaseModel):
     developer_id: str
     title: str
@@ -52,18 +51,15 @@ class Project(BaseModel):
     status: str = "successful"
     tips: str = ""
 
-
 class Video(BaseModel):
     developer_id: str
     title: str
     url: str
 
-
 class Short(BaseModel):
     developer_id: str
     title: str
     url: str
-
 
 class Follow(BaseModel):
     follower: str
@@ -86,7 +82,6 @@ def safe_object_id(value: str):
 def home():
     return {"message": "Server is running ✅"}
 
-
 @app.get("/health")
 def health():
     return {"message": "Server is running ✅"}
@@ -98,7 +93,6 @@ def health():
 def add_developer(dev: Developer):
     developers_collection.insert_one(dev.dict())
     return {"message": "Developer added"}
-
 
 @app.get("/developers")
 def get_developers():
@@ -121,7 +115,6 @@ def get_developers():
         })
 
     return result
-
 
 @app.get("/developers/search")
 def search_developers(q: str):
@@ -150,7 +143,6 @@ def search_developers(q: str):
         })
 
     return result
-
 
 @app.get("/developers/{developer_id}")
 def get_developer(developer_id: str):
@@ -185,7 +177,6 @@ def add_project(project: Project):
     projects_collection.insert_one(project.dict())
     return {"message": "Project added"}
 
-
 @app.get("/developers/{developer_id}/projects")
 def get_projects(developer_id: str):
     projects = list(projects_collection.find({"developer_id": developer_id}))
@@ -212,7 +203,6 @@ def add_video(video: Video):
     videos_collection.insert_one(video.dict())
     return {"message": "Video added"}
 
-
 @app.get("/developers/{developer_id}/videos")
 def get_videos(developer_id: str):
     videos = list(videos_collection.find({"developer_id": developer_id}))
@@ -223,6 +213,7 @@ def get_videos(developer_id: str):
     for v in videos:
         result.append({
             "id": str(v["_id"]),
+            "developer_id": v.get("developer_id", ""),
             "title": v.get("title", ""),
             "url": f"{URL_BASE}/videos/{v.get('url', '')}",
             "developer_name": dev.get("name", "") if dev else "",
@@ -232,6 +223,70 @@ def get_videos(developer_id: str):
 
     return result
 
+@app.get("/videos/search")
+def search_videos(q: str):
+    videos = list(videos_collection.find({
+        "title": {"$regex": q, "$options": "i"}
+    }))
+
+    result = []
+
+    for v in videos:
+        developer_id = v.get("developer_id", "")
+        dev = None
+
+        if developer_id:
+            try:
+                dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
+            except:
+                dev = None
+
+        result.append({
+            "id": str(v["_id"]),
+            "developer_id": developer_id,
+            "title": v.get("title", ""),
+            "url": f"{URL_BASE}/videos/{v.get('url', '')}",
+            "developer_name": dev.get("name", "") if dev else "",
+            "developer_avatar": dev.get("avatar", "") if dev else "",
+            "views": 0
+        })
+
+    return result
+
+@app.get("/videos/{video_id}")
+def get_video_by_id(video_id: str):
+    video = videos_collection.find_one({"_id": safe_object_id(video_id)})
+
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    developer_id = video.get("developer_id", "")
+    dev = None
+
+    if developer_id:
+        try:
+            dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
+        except:
+            dev = None
+
+    return {
+        "id": str(video["_id"]),
+        "developer_id": developer_id,
+        "title": video.get("title", ""),
+        "url": f"{URL_BASE}/videos/{video.get('url', '')}",
+        "developer_name": dev.get("name", "") if dev else "",
+        "developer_avatar": dev.get("avatar", "") if dev else "",
+        "views": 0
+    }
+
+@app.delete("/videos/{video_id}")
+def delete_video(video_id: str):
+    result = videos_collection.delete_one({"_id": safe_object_id(video_id)})
+
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return {"message": "Video deleted"}
+
 # ===============================
 # Shorts
 # ===============================
@@ -239,7 +294,6 @@ def get_videos(developer_id: str):
 def add_short(short: Short):
     shorts_collection.insert_one(short.dict())
     return {"message": "Short added"}
-
 
 @app.get("/developers/{developer_id}/shorts")
 def get_shorts(developer_id: str):
@@ -267,7 +321,6 @@ def get_shorts(developer_id: str):
 def follow_user(follow: Follow):
     follows_collection.insert_one(follow.dict())
     return {"message": "Followed"}
-
 
 @app.get("/follow")
 def get_follow():
