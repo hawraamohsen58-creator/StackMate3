@@ -3,7 +3,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pymongo import MongoClient
 from bson import ObjectId
-import os
 
 app = FastAPI()
 
@@ -23,7 +22,7 @@ follows_collection = db["follows"]
 # ===============================
 # Static Files
 # ===============================
-app.mount("/videos", StaticFiles(directory="videos"), name="videos")
+app.mount("/media/videos", StaticFiles(directory="videos"), name="media_videos")
 
 URL_BASE = "https://stackmate3.onrender.com"
 
@@ -215,7 +214,7 @@ def get_videos(developer_id: str):
             "id": str(v["_id"]),
             "developer_id": v.get("developer_id", ""),
             "title": v.get("title", ""),
-            "url": f"{URL_BASE}/videos/{v.get('url', '')}",
+            "url": f"{URL_BASE}/media/videos/{v.get('url', '')}",
             "developer_name": dev.get("name", "") if dev else "",
             "developer_avatar": dev.get("avatar", "") if dev else "",
             "views": 0
@@ -245,7 +244,7 @@ def search_videos(q: str):
             "id": str(v["_id"]),
             "developer_id": developer_id,
             "title": v.get("title", ""),
-            "url": f"{URL_BASE}/videos/{v.get('url', '')}",
+            "url": f"{URL_BASE}/media/videos/{v.get('url', '')}",
             "developer_name": dev.get("name", "") if dev else "",
             "developer_avatar": dev.get("avatar", "") if dev else "",
             "views": 0
@@ -273,7 +272,7 @@ def get_video_by_id(video_id: str):
         "id": str(video["_id"]),
         "developer_id": developer_id,
         "title": video.get("title", ""),
-        "url": f"{URL_BASE}/videos/{video.get('url', '')}",
+        "url": f"{URL_BASE}/media/videos/{video.get('url', '')}",
         "developer_name": dev.get("name", "") if dev else "",
         "developer_avatar": dev.get("avatar", "") if dev else "",
         "views": 0
@@ -306,7 +305,7 @@ def get_shorts(developer_id: str):
         result.append({
             "id": str(s["_id"]),
             "title": s.get("title", ""),
-            "url": f"{URL_BASE}/videos/{s.get('url', '')}",
+            "url": f"{URL_BASE}/media/videos/{s.get('url', '')}",
             "developer_name": dev.get("name", "") if dev else "",
             "developer_avatar": dev.get("avatar", "") if dev else "",
             "likes": 0
