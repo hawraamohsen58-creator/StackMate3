@@ -53,7 +53,12 @@ class Project(BaseModel):
 class Video(BaseModel):
     developer_id: str
     title: str
-    url: str
+    url: str = ""
+    url_480: str = ""
+    url_720: str = ""
+    url_1080: str = ""
+    thumbnail: str = ""
+    views: int = 0
 
 class Short(BaseModel):
     developer_id: str
@@ -206,28 +211,34 @@ def add_video(video: Video):
 def get_videos(developer_id: str):
     videos = list(videos_collection.find({"developer_id": developer_id}))
     result = []
-
     dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
 
     for v in videos:
+        url = v.get("url", "")
+        url_480 = v.get("url_480", "")
+        url_720 = v.get("url_720", "")
+        url_1080 = v.get("url_1080", "")
+
         result.append({
             "id": str(v["_id"]),
             "developer_id": v.get("developer_id", ""),
             "title": v.get("title", ""),
-            "url": f"{URL_BASE}/media/videos/{v.get('url', '')}",
+            "url": f"{URL_BASE}/media/videos/{url}" if url else "",
+            "url_480": f"{URL_BASE}/media/videos/{url_480}" if url_480 else "",
+            "url_720": f"{URL_BASE}/media/videos/{url_720}" if url_720 else "",
+            "url_1080": f"{URL_BASE}/media/videos/{url_1080}" if url_1080 else "",
+            "thumbnail": v.get("thumbnail", ""),
             "developer_name": dev.get("name", "") if dev else "",
             "developer_avatar": dev.get("avatar", "") if dev else "",
-            "views": 0
+            "views": v.get("views", 0)
         })
 
     return result
-
 @app.get("/videos/search")
 def search_videos(q: str):
     videos = list(videos_collection.find({
         "title": {"$regex": q, "$options": "i"}
     }))
-
     result = []
 
     for v in videos:
@@ -240,14 +251,23 @@ def search_videos(q: str):
             except:
                 dev = None
 
+        url = v.get("url", "")
+        url_480 = v.get("url_480", "")
+        url_720 = v.get("url_720", "")
+        url_1080 = v.get("url_1080", "")
+
         result.append({
             "id": str(v["_id"]),
             "developer_id": developer_id,
             "title": v.get("title", ""),
-            "url": f"{URL_BASE}/media/videos/{v.get('url', '')}",
+            "url": f"{URL_BASE}/media/videos/{url}" if url else "",
+            "url_480": f"{URL_BASE}/media/videos/{url_480}" if url_480 else "",
+            "url_720": f"{URL_BASE}/media/videos/{url_720}" if url_720 else "",
+            "url_1080": f"{URL_BASE}/media/videos/{url_1080}" if url_1080 else "",
+            "thumbnail": v.get("thumbnail", ""),
             "developer_name": dev.get("name", "") if dev else "",
             "developer_avatar": dev.get("avatar", "") if dev else "",
-            "views": 0
+            "views": v.get("views", 0)
         })
 
     return result
@@ -255,7 +275,6 @@ def search_videos(q: str):
 @app.get("/videos/{video_id}")
 def get_video_by_id(video_id: str):
     video = videos_collection.find_one({"_id": safe_object_id(video_id)})
-
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
@@ -268,14 +287,23 @@ def get_video_by_id(video_id: str):
         except:
             dev = None
 
+    url = video.get("url", "")
+    url_480 = video.get("url_480", "")
+    url_720 = video.get("url_720", "")
+    url_1080 = video.get("url_1080", "")
+
     return {
         "id": str(video["_id"]),
         "developer_id": developer_id,
         "title": video.get("title", ""),
-        "url": f"{URL_BASE}/media/videos/{video.get('url', '')}",
+        "url": f"{URL_BASE}/media/videos/{url}" if url else "",
+        "url_480": f"{URL_BASE}/media/videos/{url_480}" if url_480 else "",
+        "url_720": f"{URL_BASE}/media/videos/{url_720}" if url_720 else "",
+        "url_1080": f"{URL_BASE}/media/videos/{url_1080}" if url_1080 else "",
+        "thumbnail": video.get("thumbnail", ""),
         "developer_name": dev.get("name", "") if dev else "",
         "developer_avatar": dev.get("avatar", "") if dev else "",
-        "views": 0
+        "views": video.get("views", 0)
     }
 
 @app.delete("/videos/{video_id}")
