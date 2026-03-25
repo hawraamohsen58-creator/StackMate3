@@ -18,6 +18,7 @@ projects_collection = db["projects"]
 videos_collection = db["videos"]
 shorts_collection = db["shorts"]
 follows_collection = db["follows"]
+accounts_collection = db["accounts"]
 
 # ===============================
 # Static Files
@@ -69,6 +70,12 @@ class Follow(BaseModel):
     follower: str
     following: str
     status: str = "accepted"
+    
+class Account(BaseModel):
+    email: str
+    username: str
+    password: str
+    account_type: str
 
 # ===============================
 # Helper
@@ -89,6 +96,28 @@ def home():
 @app.get("/health")
 def health():
     return {"message": "Server is running ✅"}
+# ===============================
+# Auth
+# ===============================
+@app.post("/signup")
+def signup(account: Account):
+    existing = accounts_collection.find_one({
+        "$or": [
+            {"email": account.email},
+            {"username": account.username}
+        ]
+    })
+
+    if existing:
+        raise HTTPException(status_code=400, detail="Email or username already exists")
+
+    result = accounts_collection.insert_one(account.dict())
+
+    return {
+        "message": "Account created",
+        "id": str(result.inserted_id),
+        "account_type": account.account_type
+    }
 
 # ===============================
 # Developers
