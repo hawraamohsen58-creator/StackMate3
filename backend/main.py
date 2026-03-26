@@ -126,6 +126,34 @@ def signup(account: Account):
     }
 
 
+# 🔥 هذا الجديد ضيفيه هنا بالضبط
+class LoginData(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/login")
+def login(data: LoginData):
+    account = accounts_collection.find_one({
+        "email": data.email,
+        "password": data.password
+    })
+
+    if not account:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    return {
+        "message": "Login successful",
+        "id": str(account["_id"]),
+        "email": account.get("email", ""),
+        "username": account.get("username", ""),
+        "account_type": account.get("account_type", ""),
+        "name": account.get("name", ""),
+        "description": account.get("description", ""),
+        "profile_image": account.get("profile_image", "")
+    }
+
+
 # 🔥 جلب بيانات حساب
 @app.get("/accounts/{account_id}")
 def get_account(account_id: str):
