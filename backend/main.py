@@ -76,7 +76,9 @@ class Account(BaseModel):
     username: str
     password: str
     account_type: str
-
+    name: str = ""
+    description: str = ""
+    profile_image: str = ""
 # ===============================
 # Helper
 # ===============================
@@ -97,8 +99,12 @@ def home():
 def health():
     return {"message": "Server is running ✅"}
 # ===============================
-# Auth
+# Auth / Accounts
 # ===============================
+
+from fastapi import HTTPException
+
+# تسجيل حساب جديد
 @app.post("/signup")
 def signup(account: Account):
     existing = accounts_collection.find_one({
@@ -118,6 +124,58 @@ def signup(account: Account):
         "id": str(result.inserted_id),
         "account_type": account.account_type
     }
+
+
+# 🔥 جلب بيانات حساب
+@app.get("/accounts/{account_id}")
+def get_account(account_id: str):
+    account = accounts_collection.find_one({"_id": safe_object_id(account_id)})
+
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    return {
+        "id": str(account["_id"]),
+        "email": account.get("email", ""),
+        "username": account.get("username", ""),
+        "account_type": account.get("account_type", ""),
+        "name": account.get("name", ""),
+        "description": account.get("description", ""),
+        "profile_image": account.get("profile_image", "")
+    }
+
+
+# 🔥 موديل تحديث البروفايل
+class UpdateUserProfile(BaseModel):
+    name: str = ""
+    username: str = ""
+    email: str = ""
+    description: str = ""
+    profile_image: str = ""
+
+
+# 🔥 تحديث بيانات المستخدم
+@app.put("/accounts/{account_id}/profile")
+def update_user_profile(account_id: str, profile: UpdateUserProfile):
+    existing = accounts_collection.find_one({"_id": safe_object_id(account_id)})
+
+    if not existing:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    accounts_collection.update_one(
+        {"_id": safe_object_id(account_id)},
+        {
+            "$set": {
+                "name": profile.name,
+                "username": profile.username,
+                "email": profile.email,
+                "description": profile.description,
+                "profile_image": profile.profile_image
+            }
+        }
+    )
+
+    return {"message": "Profile updated successfully"}
 
 # ===============================
 # Developers
