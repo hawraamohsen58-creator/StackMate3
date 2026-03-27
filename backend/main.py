@@ -163,14 +163,21 @@ def get_account(account_id: str):
         raise HTTPException(status_code=404, detail="Account not found")
 
     return {
-        "id": str(account["_id"]),
-        "email": account.get("email", ""),
-        "username": account.get("username", ""),
-        "account_type": account.get("account_type", ""),
-        "name": account.get("name", ""),
-        "description": account.get("description", ""),
-        "profile_image": account.get("profile_image", "")
-    }
+    "id": str(account["_id"]),
+    "email": account.get("email", ""),
+    "username": account.get("username", ""),
+    "account_type": account.get("account_type", ""),
+    "name": account.get("name", ""),
+    "description": account.get("description", ""),
+    "profile_image": account.get("profile_image", ""),
+
+    "job": account.get("job", ""),
+    "location": account.get("location", ""),
+    "experience": account.get("experience", ""),
+    "skills": account.get("skills", ""),
+    "technologies": account.get("technologies", ""),
+    "portfolio": account.get("portfolio", "")
+}
 
 
 # 🔥 موديل تحديث البروفايل
@@ -181,6 +188,12 @@ class UpdateUserProfile(BaseModel):
     description: str = ""
     profile_image: str = ""
 
+    job: str = ""
+    location: str = ""
+    experience: str = ""
+    skills: str = ""
+    technologies: str = ""
+    portfolio: str = ""
 
 # 🔥 تحديث بيانات المستخدم
 @app.put("/accounts/{account_id}/profile")
@@ -198,7 +211,15 @@ def update_user_profile(account_id: str, profile: UpdateUserProfile):
                 "username": profile.username,
                 "email": profile.email,
                 "description": profile.description,
-                "profile_image": profile.profile_image
+                "profile_image": profile.profile_image,
+
+                # 🔥 الجديد (المهم)
+                "job": profile.job,
+                "location": profile.location,
+                "experience": profile.experience,
+                "skills": profile.skills,
+                "technologies": profile.technologies,
+                "portfolio": profile.portfolio,
             }
         }
     )
