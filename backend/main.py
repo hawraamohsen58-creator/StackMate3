@@ -550,7 +550,7 @@ def check_follow(follower: str, following: str):
     }
 
 
-# 📊 عدد المتابعين + المتابَعين
+#  عدد المتابعين + المتابَعين
 @app.get("/follow/counts/{account_id}")
 def get_follow_counts(account_id: str):
 
