@@ -480,11 +480,46 @@ def get_shorts(developer_id: str):
 # ===============================
 # Follow
 # ===============================
+
 @app.post("/follow")
 def follow_user(follow: Follow):
-    follows_collection.insert_one(follow.dict())
-    return {"message": "Followed"}
+    if follow.follower == follow.following:
+        raise HTTPException(status_code=400, detail="You cannot follow yourself")
 
+    existing = follows_collection.find_one({
+        "follower": follow.follower,
+        "following": follow.following,
+        "status": "accepted"
+    })
+
+    if existing:
+        return {"message": "Already following"}
+
+    follows_collection.insert_one({
+        "follower": follow.follower,
+        "following": follow.following,
+        "status": "accepted"
+    })
+
+    return {"message": "Followed successfully"}
+
+
+# 🔴 unfollow
+@app.delete("/follow")
+def unfollow_user(follower: str, following: str):
+    result = follows_collection.delete_one({
+        "follower": follower,
+        "following": following,
+        "status": "accepted"
+    })
+
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Not following")
+
+    return {"message": "Unfollowed successfully"}
+
+
+# 📥 كل العلاقات (اختياري)
 @app.get("/follow")
 def get_follow():
     follows = follows_collection.find()
@@ -499,3 +534,37 @@ def get_follow():
         })
 
     return result
+
+
+# ✅ هل هذا المستخدم متابع؟
+@app.get("/follow/check")
+def check_follow(follower: str, following: str):
+    existing = follows_collection.find_one({
+        "follower": follower,
+        "following": following,
+        "status": "accepted"
+    })
+
+    return {
+        "is_following": True if existing else False
+    }
+
+
+# 📊 عدد المتابعين + المتابَعين
+@app.get("/follow/counts/{account_id}")
+def get_follow_counts(account_id: str):
+
+    followers_count = follows_collection.count_documents({
+        "following": account_id,
+        "status": "accepted"
+    })
+
+    following_count = follows_collection.count_documents({
+        "follower": account_id,
+        "status": "accepted"
+    })
+
+    return {
+        "followers_count": followers_count,
+        "following_count": following_count
+    }
