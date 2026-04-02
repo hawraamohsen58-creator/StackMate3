@@ -70,7 +70,8 @@ class Follow(BaseModel):
     follower: str
     following: str
     status: str = "accepted"
-    
+
+
 class Account(BaseModel):
     email: str
     username: str
