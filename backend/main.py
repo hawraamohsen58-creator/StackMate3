@@ -11,11 +11,14 @@ app = FastAPI()
 # MongoDB Connection
 # ===============================
 
-uri = "mongodb+srv://hawraawaleed33_db_user:k0c6YSVbOChqqyOn@cluster0.qk8xvxh.mongodb.net/test?retryWrites=true&w=majority&appName=Cluster0"
+
+
+uri = "mongodb+srv://hawraawaleed33_db_user:k0c6YSVbOChqqyOn@cluster0.qk8xvxh.mongodb.net/test?retryWrites=true&w=majority"
 
 client = MongoClient(
     uri,
     tls=True,
+    tlsAllowInvalidCertificates=True,  # 🔥 هذا الحل المهم
     tlsCAFile=certifi.where()
 )
 
