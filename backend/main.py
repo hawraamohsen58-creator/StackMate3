@@ -107,6 +107,7 @@ from fastapi import HTTPException
 # تسجيل حساب جديد
 @app.post("/signup")
 def signup(account: Account):
+
     existing = accounts_collection.find_one({
         "$or": [
             {"email": account.email},
@@ -115,18 +116,36 @@ def signup(account: Account):
     })
 
     if existing:
-        raise HTTPException(status_code=400, detail="Email or username already exists")
+        raise HTTPException(
+            status_code=400,
+            detail="Email or username already exists"
+        )
 
+    # حفظ الحساب
     result = accounts_collection.insert_one(account.dict())
+    account_id = str(result.inserted_id)
+
+    # 🔥 إذا الحساب Developer ينضاف لقائمة المبرمجين
+    if account.account_type == "developer":
+        developers_collection.insert_one({
+            "account_id": account_id,
+            "name": account.username,
+            "skill": "",
+            "bio": "",
+            "avatar": "",
+            "job": "",
+            "location": "",
+            "experience": "",
+            "technologies": "",
+            "portfolio": ""
+        })
 
     return {
         "message": "Account created",
-        "id": str(result.inserted_id),
+        "id": account_id,
         "account_type": account.account_type
     }
 
-
-# 🔥 هذا الجديد ضيفيه هنا بالضبط
 class LoginData(BaseModel):
     email: str
     password: str
@@ -163,21 +182,20 @@ def get_account(account_id: str):
         raise HTTPException(status_code=404, detail="Account not found")
 
     return {
-    "id": str(account["_id"]),
-    "email": account.get("email", ""),
-    "username": account.get("username", ""),
-    "account_type": account.get("account_type", ""),
-    "name": account.get("name", ""),
-    "description": account.get("description", ""),
-    "profile_image": account.get("profile_image", ""),
-
-    "job": account.get("job", ""),
-    "location": account.get("location", ""),
-    "experience": account.get("experience", ""),
-    "skills": account.get("skills", ""),
-    "technologies": account.get("technologies", ""),
-    "portfolio": account.get("portfolio", "")
-}
+        "id": str(account["_id"]),
+        "email": account.get("email", ""),
+        "username": account.get("username", ""),
+        "account_type": account.get("account_type", ""),
+        "name": account.get("name", ""),
+        "description": account.get("description", ""),
+        "profile_image": account.get("profile_image", ""),
+        "job": account.get("job", ""),
+        "location": account.get("location", ""),
+        "experience": account.get("experience", ""),
+        "skills": account.get("skills", ""),
+        "technologies": account.get("technologies", ""),
+        "portfolio": account.get("portfolio", "")
+    }
 
 
 # 🔥 موديل تحديث البروفايل
@@ -195,14 +213,15 @@ class UpdateUserProfile(BaseModel):
     technologies: str = ""
     portfolio: str = ""
 
-# 🔥 تحديث بيانات المستخدم
 @app.put("/accounts/{account_id}/profile")
 def update_user_profile(account_id: str, profile: UpdateUserProfile):
+
     existing = accounts_collection.find_one({"_id": safe_object_id(account_id)})
 
     if not existing:
         raise HTTPException(status_code=404, detail="Account not found")
 
+    # تحديث الحساب
     accounts_collection.update_one(
         {"_id": safe_object_id(account_id)},
         {
@@ -212,8 +231,6 @@ def update_user_profile(account_id: str, profile: UpdateUserProfile):
                 "email": profile.email,
                 "description": profile.description,
                 "profile_image": profile.profile_image,
-
-                # 🔥 الجديد (المهم)
                 "job": profile.job,
                 "location": profile.location,
                 "experience": profile.experience,
@@ -223,6 +240,27 @@ def update_user_profile(account_id: str, profile: UpdateUserProfile):
             }
         }
     )
+
+    # 🔥 تحديث developer أيضاً
+    if existing.get("account_type") == "developer":
+        developers_collection.update_one(
+            {"account_id": account_id},
+            {
+                "$set": {
+                    "account_id": account_id,
+                    "name": profile.name,
+                    "skill": profile.skills,
+                    "bio": profile.description,
+                    "avatar": profile.profile_image,
+                    "job": profile.job,
+                    "location": profile.location,
+                    "experience": profile.experience,
+                    "technologies": profile.technologies,
+                    "portfolio": profile.portfolio
+                }
+            },
+            upsert=True
+        )
 
     return {"message": "Profile updated successfully"}
 
