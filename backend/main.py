@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pymongo import MongoClient
 from bson import ObjectId
+import certifi
 
 app = FastAPI()
 
@@ -10,11 +11,15 @@ app = FastAPI()
 # MongoDB Connection
 # ===============================
 
-uri = "mongodb+srv://hawraawaleed33_db_user:k0c6YSVbOChqqyOn@cluster0.qk8xvxh.mongodb.net/?appName=Cluster0"
+uri = "mongodb+srv://hawraawaleed33_db_user:k0c6YSVbOChqqyOn@cluster0.qk8xvxh.mongodb.net/test?retryWrites=true&w=majority&appName=Cluster0"
 
-client = MongoClient(uri)
+client = MongoClient(
+    uri,
+    tls=True,
+    tlsCAFile=certifi.where()
+)
 
-db = client["test"]  # اسم الداتابيس
+db = client["test"] # اسم الداتابيس
 
 developers_collection = db["developers"]
 projects_collection = db["projects"]
