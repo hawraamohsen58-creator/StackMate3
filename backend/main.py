@@ -9,10 +9,13 @@ app = FastAPI()
 # ===============================
 # MongoDB Connection
 # ===============================
-MONGO_URI = "mongodb+srv://user:user24681012@cluster0.jeyjiot.mongodb.net/developers_db?retryWrites=true&w=majority"
-client = MongoClient(MONGO_URI)
-db = client["developers_db"]
+uri = "mongodb+srv://hawraawaleed33_db_user:k0c6YSVbOChqqyOn@cluster0.qk8xvxh.mongodb.net/?appName=Cluster0"
 
+client = MongoClient(uri)
+
+db = client["test"]  # اسم الداتابيس
+
+print("Connected successfully ✅")
 developers_collection = db["developers"]
 projects_collection = db["projects"]
 videos_collection = db["videos"]
