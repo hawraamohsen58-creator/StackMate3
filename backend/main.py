@@ -9,13 +9,13 @@ app = FastAPI()
 # ===============================
 # MongoDB Connection
 # ===============================
+
 uri = "mongodb+srv://hawraawaleed33_db_user:k0c6YSVbOChqqyOn@cluster0.qk8xvxh.mongodb.net/?appName=Cluster0"
 
 client = MongoClient(uri)
 
 db = client["test"]  # اسم الداتابيس
 
-print("Connected successfully ✅")
 developers_collection = db["developers"]
 projects_collection = db["projects"]
 videos_collection = db["videos"]
@@ -102,6 +102,13 @@ def home():
 @app.get("/health")
 def health():
     return {"message": "Server is running ✅"}
+@app.get("/db-check")
+def db_check():
+    try:
+        client.admin.command('ping')  # 🔥 يفحص الاتصال الحقيقي
+        return {"message": "Database connected successfully ✅"}
+    except Exception as e:
+        return {"error": str(e)}
 # ===============================
 # Auth / Accounts
 # ===============================
