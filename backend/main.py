@@ -625,3 +625,60 @@ def get_follow_counts(account_id: str):
         "followers_count": followers_count,
         "following_count": following_count
     }
+# عدد المتابعين + المتابَعين
+@app.get("/follow/counts/{account_id}")
+def get_follow_counts(account_id: str):
+    followers_count = follows_collection.count_documents({
+        "following": account_id,
+        "status": "accepted"
+    })
+    following_count = follows_collection.count_documents({
+        "follower": account_id,
+        "status": "accepted"
+    })
+    return {
+        "followers_count": followers_count,
+        "following_count": following_count
+    }
+#جلب المتابعين 
+
+@app.get("/followers/{account_id}")
+def get_followers(account_id: str):
+    follows = follows_collection.find({
+        "following": account_id,
+        "status": "accepted"
+    })
+
+    result = []
+    for f in follows:
+        acc = accounts_collection.find_one({"_id": safe_object_id(f["follower"])})
+        if acc:
+            result.append({
+                "id": str(acc["_id"]),
+                "username": acc.get("username", ""),
+                "name": acc.get("name", ""),
+                "profile_image": acc.get("profile_image", "")
+            })
+
+    return result
+
+#جلب المتابعين المتابعهم 
+@app.get("/following/{account_id}")
+def get_following(account_id: str):
+    follows = follows_collection.find({
+        "follower": account_id,
+        "status": "accepted"
+    })
+
+    result = []
+    for f in follows:
+        acc = accounts_collection.find_one({"_id": safe_object_id(f["following"])})
+        if acc:
+            result.append({
+                "id": str(acc["_id"]),
+                "username": acc.get("username", ""),
+                "name": acc.get("name", ""),
+                "profile_image": acc.get("profile_image", "")
+            })
+
+    return result
