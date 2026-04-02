@@ -9,7 +9,7 @@ app = FastAPI()
 # ===============================
 # MongoDB Connection
 # ===============================
-MONGO_URI = "mongodb+srv://user:user246810@cluster0.jeyjiot.mongodb.net/developers_db?retryWrites=true&w=majority"
+MONGO_URI = "mongodb+srv://user:user24681012@cluster0.jeyjiot.mongodb.net/developers_db?retryWrites=true&w=majority"
 client = MongoClient(MONGO_URI)
 db = client["developers_db"]
 
