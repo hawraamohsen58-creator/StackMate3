@@ -1,9 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pymongo import MongoClient
 from bson import ObjectId
 import certifi
+import os
+import shutil
 
 app = FastAPI()
 
@@ -34,7 +36,9 @@ accounts_collection = db["accounts"]
 # ===============================
 # Static Files
 # ===============================
+
 app.mount("/media/videos", StaticFiles(directory="videos"), name="media_videos")
+app.mount("/thumbnails", StaticFiles(directory="thumbnails"), name="thumbnails")
 
 URL_BASE = "https://stackmate3.onrender.com"
 
@@ -65,6 +69,7 @@ class Project(BaseModel):
 class Video(BaseModel):
     developer_id: str
     title: str
+    description: str = ""   
     url: str = ""
     url_480: str = ""
     url_720: str = ""
@@ -120,8 +125,6 @@ def db_check():
 # ===============================
 # Auth / Accounts
 # ===============================
-
-from fastapi import HTTPException
 
 # تسجيل حساب جديد
 @app.post("/signup")
@@ -286,10 +289,23 @@ def update_user_profile(account_id: str, profile: UpdateUserProfile):
 # ===============================
 # Developers
 # ===============================
+
 @app.post("/developers")
 def add_developer(dev: Developer):
-    developers_collection.insert_one(dev.dict())
+    developers_collection.insert_one({
+        "account_id": "",  # 👈 مهم جدًا نضيفه
+        "name": dev.name,
+        "skill": dev.skill,
+        "bio": dev.bio,
+        "avatar": dev.avatar,
+        "job": dev.job,
+        "location": dev.location,
+        "experience": dev.experience,
+        "technologies": dev.technologies,
+        "portfolio": dev.portfolio
+    })
     return {"message": "Developer added"}
+
 
 @app.get("/developers")
 def get_developers():
@@ -312,6 +328,7 @@ def get_developers():
         })
 
     return result
+
 
 @app.get("/developers/search")
 def search_developers(q: str):
@@ -341,6 +358,7 @@ def search_developers(q: str):
 
     return result
 
+
 @app.get("/developers/{developer_id}")
 def get_developer(developer_id: str):
     dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
@@ -352,6 +370,7 @@ def get_developer(developer_id: str):
         "following": developer_id,
         "status": "accepted"
     })
+
     return {
         "id": str(dev["_id"]),
         "name": dev.get("name", ""),
@@ -680,5 +699,18 @@ def get_following(account_id: str):
                 "name": acc.get("name", ""),
                 "profile_image": acc.get("profile_image", "")
             })
+            
 
     return result
+@app.get("/ffmpeg-check")
+def ffmpeg_check():
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            text=True
+        )
+        return {"message": "ffmpeg installed ✅", "output": result.stdout[:200]}
+    except Exception as e:
+        return {"error": str(e)}
