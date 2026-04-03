@@ -701,6 +701,18 @@ def get_following(account_id: str):
             })
 
     return result
+@app.get("/ffmpeg-check")
+def ffmpeg_check():
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            text=True
+        )
+        return {"message": "ffmpeg installed ✅", "output": result.stdout[:200]}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 
