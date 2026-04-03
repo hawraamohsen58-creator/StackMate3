@@ -6,6 +6,8 @@ from bson import ObjectId
 import certifi
 import os
 import shutil
+import subprocess
+import uuid
 
 app = FastAPI()
 
@@ -35,9 +37,18 @@ accounts_collection = db["accounts"]
 
 # ===============================
 # Static Files
-# ===============================
+# ==============================
+# إنشاء الفولدرات إذا مو موجودة
+os.makedirs("videos", exist_ok=True)
+os.makedirs("thumbnails", exist_ok=True)
 
+# ربط الفيديوهات
 app.mount("/media/videos", StaticFiles(directory="videos"), name="media_videos")
+
+# ربط الصور (thumbnail)
+app.mount("/thumbnails", StaticFiles(directory="thumbnails"), name="thumbnails")
+
+# رابط السيرفر
 URL_BASE = "https://stackmate3.onrender.com"
 
 # ===============================
@@ -412,15 +423,115 @@ def get_projects(developer_id: str):
 # ===============================
 # Videos
 # ===============================
+
 @app.post("/videos")
 def add_video(video: Video):
     videos_collection.insert_one(video.dict())
     return {"message": "Video added"}
 
+
+@app.post("/videos/upload")
+def upload_video(
+    title: str = Form(...),
+    description: str = Form(""),
+    developer_id: str = Form(...),
+    file: UploadFile = File(...),
+    thumbnail: UploadFile = File(None)
+):
+    # نتأكد من وجود الفولدرات
+    os.makedirs("videos", exist_ok=True)
+    os.makedirs("thumbnails", exist_ok=True)
+
+    # نجيب المبرمج من خلال account_id
+    dev = developers_collection.find_one({"account_id": developer_id})
+    if not dev:
+        raise HTTPException(status_code=404, detail="Developer not found")
+
+    # نسوي أسماء فريدة للفيديو
+    unique_id = str(uuid.uuid4())
+
+    original_filename = f"{unique_id}_original.mp4"
+    video_480_filename = f"{unique_id}_480.mp4"
+    video_720_filename = f"{unique_id}_720.mp4"
+    video_1080_filename = f"{unique_id}_1080.mp4"
+
+    original_path = os.path.join("videos", original_filename)
+    video_480_path = os.path.join("videos", video_480_filename)
+    video_720_path = os.path.join("videos", video_720_filename)
+    video_1080_path = os.path.join("videos", video_1080_filename)
+
+    # نحفظ الفيديو الأصلي
+    with open(original_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # نحول الفيديو إلى 480p
+    subprocess.run([
+        "ffmpeg", "-i", original_path,
+        "-vf", "scale=-2:480",
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-y",
+        video_480_path
+    ], check=True)
+
+    # نحول الفيديو إلى 720p
+    subprocess.run([
+        "ffmpeg", "-i", original_path,
+        "-vf", "scale=-2:720",
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-y",
+        video_720_path
+    ], check=True)
+
+    # نحول الفيديو إلى 1080p
+    subprocess.run([
+        "ffmpeg", "-i", original_path,
+        "-vf", "scale=-2:1080",
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-y",
+        video_1080_path
+    ], check=True)
+
+    # إذا اختار المستخدم thumbnail نخزنها
+    thumbnail_url = ""
+    if thumbnail:
+        thumb_filename = f"{unique_id}_thumb.jpg"
+        thumb_path = os.path.join("thumbnails", thumb_filename)
+
+        with open(thumb_path, "wb") as buffer:
+            shutil.copyfileobj(thumbnail.file, buffer)
+
+        thumbnail_url = f"{URL_BASE}/thumbnails/{thumb_filename}"
+
+    # نخزن بيانات الفيديو في MongoDB
+    videos_collection.insert_one({
+        "developer_id": str(dev["_id"]),
+        "title": title,
+        "description": description,
+        "url": original_filename,
+        "url_480": video_480_filename,
+        "url_720": video_720_filename,
+        "url_1080": video_1080_filename,
+        "thumbnail": thumbnail_url,
+        "views": 0
+    })
+
+    return {"message": "Video uploaded successfully ✅"}
+
+
 @app.get("/developers/{developer_id}/videos")
 def get_videos(developer_id: str):
     videos = list(videos_collection.find({"developer_id": developer_id}))
     result = []
+
     dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
 
     for v in videos:
@@ -433,6 +544,7 @@ def get_videos(developer_id: str):
             "id": str(v["_id"]),
             "developer_id": v.get("developer_id", ""),
             "title": v.get("title", ""),
+            "description": v.get("description", ""),
             "url": f"{URL_BASE}/media/videos/{url}" if url else "",
             "url_480": f"{URL_BASE}/media/videos/{url_480}" if url_480 else "",
             "url_720": f"{URL_BASE}/media/videos/{url_720}" if url_720 else "",
@@ -444,11 +556,14 @@ def get_videos(developer_id: str):
         })
 
     return result
+
+
 @app.get("/videos/search")
 def search_videos(q: str):
     videos = list(videos_collection.find({
         "title": {"$regex": q, "$options": "i"}
     }))
+
     result = []
 
     for v in videos:
@@ -470,6 +585,7 @@ def search_videos(q: str):
             "id": str(v["_id"]),
             "developer_id": developer_id,
             "title": v.get("title", ""),
+            "description": v.get("description", ""),
             "url": f"{URL_BASE}/media/videos/{url}" if url else "",
             "url_480": f"{URL_BASE}/media/videos/{url_480}" if url_480 else "",
             "url_720": f"{URL_BASE}/media/videos/{url_720}" if url_720 else "",
@@ -482,9 +598,11 @@ def search_videos(q: str):
 
     return result
 
+
 @app.get("/videos/{video_id}")
 def get_video_by_id(video_id: str):
     video = videos_collection.find_one({"_id": safe_object_id(video_id)})
+
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
@@ -506,6 +624,7 @@ def get_video_by_id(video_id: str):
         "id": str(video["_id"]),
         "developer_id": developer_id,
         "title": video.get("title", ""),
+        "description": video.get("description", ""),
         "url": f"{URL_BASE}/media/videos/{url}" if url else "",
         "url_480": f"{URL_BASE}/media/videos/{url_480}" if url_480 else "",
         "url_720": f"{URL_BASE}/media/videos/{url_720}" if url_720 else "",
@@ -516,12 +635,14 @@ def get_video_by_id(video_id: str):
         "views": video.get("views", 0)
     }
 
+
 @app.delete("/videos/{video_id}")
 def delete_video(video_id: str):
     result = videos_collection.delete_one({"_id": safe_object_id(video_id)})
 
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Video not found")
+
     return {"message": "Video deleted"}
 
 # ===============================
@@ -593,7 +714,7 @@ def unfollow_user(follower: str, following: str):
     return {"message": "Unfollowed successfully"}
 
 
-# 📥 كل العلاقات (اختياري)
+# 📥 كل العلاقات
 @app.get("/follow")
 def get_follow():
     follows = follows_collection.find()
@@ -624,10 +745,9 @@ def check_follow(follower: str, following: str):
     }
 
 
-#  عدد المتابعين + المتابَعين
+# 📊 عدد المتابعين والمتابَعين
 @app.get("/follow/counts/{account_id}")
 def get_follow_counts(account_id: str):
-
     followers_count = follows_collection.count_documents({
         "following": account_id,
         "status": "accepted"
@@ -642,22 +762,9 @@ def get_follow_counts(account_id: str):
         "followers_count": followers_count,
         "following_count": following_count
     }
-# عدد المتابعين + المتابَعين
-@app.get("/follow/counts/{account_id}")
-def get_follow_counts(account_id: str):
-    followers_count = follows_collection.count_documents({
-        "following": account_id,
-        "status": "accepted"
-    })
-    following_count = follows_collection.count_documents({
-        "follower": account_id,
-        "status": "accepted"
-    })
-    return {
-        "followers_count": followers_count,
-        "following_count": following_count
-    }
-# جلب المتابعين
+
+
+# 👥 جلب المتابعين
 @app.get("/followers/{account_id}")
 def get_followers(account_id: str):
     follows = follows_collection.find({
@@ -680,7 +787,7 @@ def get_followers(account_id: str):
     return result
 
 
-# جلب المتابعين الذين أتابعهم
+# 👤 جلب الأشخاص الذين أتابعهم
 @app.get("/following/{account_id}")
 def get_following(account_id: str):
     follows = follows_collection.find({
@@ -701,6 +808,10 @@ def get_following(account_id: str):
             })
 
     return result
+# ===============================
+# TEST FFMPEG
+# ===============================
+
 @app.get("/ffmpeg-check")
 def ffmpeg_check():
     import subprocess
@@ -710,7 +821,10 @@ def ffmpeg_check():
             capture_output=True,
             text=True
         )
-        return {"message": "ffmpeg installed ✅", "output": result.stdout[:200]}
+        return {
+            "message": "ffmpeg installed ✅",
+            "output": result.stdout[:200]
+        }
     except Exception as e:
         return {"error": str(e)}
 
