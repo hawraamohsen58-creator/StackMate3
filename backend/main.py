@@ -430,6 +430,9 @@ def add_video(video: Video):
     return {"message": "Video added"}
 
 
+# ===============================
+# Upload Video (FAST - NO FFMPEG)
+# ===============================
 @app.post("/videos/upload")
 def upload_video(
     title: str = Form(...),
@@ -438,69 +441,26 @@ def upload_video(
     file: UploadFile = File(...),
     thumbnail: UploadFile = File(None)
 ):
-    # نتأكد من وجود الفولدرات
+
+    # 📁 إنشاء الفولدرات إذا ما موجودة
     os.makedirs("videos", exist_ok=True)
     os.makedirs("thumbnails", exist_ok=True)
 
-    # نجيب المبرمج من خلال account_id
+    # 🔍 نجيب المبرمج
     dev = developers_collection.find_one({"account_id": developer_id})
     if not dev:
         raise HTTPException(status_code=404, detail="Developer not found")
 
-    # نسوي أسماء فريدة للفيديو
+    # 🎥 اسم فريد للفيديو
     unique_id = str(uuid.uuid4())
+    video_filename = f"{unique_id}.mp4"
+    video_path = os.path.join("videos", video_filename)
 
-    original_filename = f"{unique_id}_original.mp4"
-    video_480_filename = f"{unique_id}_480.mp4"
-    video_720_filename = f"{unique_id}_720.mp4"
-    video_1080_filename = f"{unique_id}_1080.mp4"
-
-    original_path = os.path.join("videos", original_filename)
-    video_480_path = os.path.join("videos", video_480_filename)
-    video_720_path = os.path.join("videos", video_720_filename)
-    video_1080_path = os.path.join("videos", video_1080_filename)
-
-    # نحفظ الفيديو الأصلي
-    with open(original_path, "wb") as buffer:
+    # 💾 حفظ الفيديو
+    with open(video_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # نحول الفيديو إلى 480p
-    subprocess.run([
-        "ffmpeg", "-i", original_path,
-        "-vf", "scale=-2:480",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-y",
-        video_480_path
-    ], check=True)
-
-    # نحول الفيديو إلى 720p
-    subprocess.run([
-        "ffmpeg", "-i", original_path,
-        "-vf", "scale=-2:720",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-y",
-        video_720_path
-    ], check=True)
-
-    # نحول الفيديو إلى 1080p
-    subprocess.run([
-        "ffmpeg", "-i", original_path,
-        "-vf", "scale=-2:1080",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-y",
-        video_1080_path
-    ], check=True)
-
-    # إذا اختار المستخدم thumbnail نخزنها
+    # 🖼️ حفظ الصورة (اختياري)
     thumbnail_url = ""
     if thumbnail:
         thumb_filename = f"{unique_id}_thumb.jpg"
@@ -511,15 +471,12 @@ def upload_video(
 
         thumbnail_url = f"{URL_BASE}/thumbnails/{thumb_filename}"
 
-    # نخزن بيانات الفيديو في MongoDB
+    # 💾 تخزين بالداتابيس
     videos_collection.insert_one({
         "developer_id": str(dev["_id"]),
         "title": title,
         "description": description,
-        "url": original_filename,
-        "url_480": video_480_filename,
-        "url_720": video_720_filename,
-        "url_1080": video_1080_filename,
+        "url": video_filename,
         "thumbnail": thumbnail_url,
         "views": 0
     })
@@ -527,6 +484,9 @@ def upload_video(
     return {"message": "Video uploaded successfully ✅"}
 
 
+# ===============================
+# Get Developer Videos
+# ===============================
 @app.get("/developers/{developer_id}/videos")
 def get_videos(developer_id: str):
     videos = list(videos_collection.find({"developer_id": developer_id}))
@@ -536,9 +496,6 @@ def get_videos(developer_id: str):
 
     for v in videos:
         url = v.get("url", "")
-        url_480 = v.get("url_480", "")
-        url_720 = v.get("url_720", "")
-        url_1080 = v.get("url_1080", "")
 
         result.append({
             "id": str(v["_id"]),
@@ -546,9 +503,6 @@ def get_videos(developer_id: str):
             "title": v.get("title", ""),
             "description": v.get("description", ""),
             "url": f"{URL_BASE}/media/videos/{url}" if url else "",
-            "url_480": f"{URL_BASE}/media/videos/{url_480}" if url_480 else "",
-            "url_720": f"{URL_BASE}/media/videos/{url_720}" if url_720 else "",
-            "url_1080": f"{URL_BASE}/media/videos/{url_1080}" if url_1080 else "",
             "thumbnail": v.get("thumbnail", ""),
             "developer_name": dev.get("name", "") if dev else "",
             "developer_avatar": dev.get("avatar", "") if dev else "",
@@ -558,6 +512,9 @@ def get_videos(developer_id: str):
     return result
 
 
+# ===============================
+# Search Videos
+# ===============================
 @app.get("/videos/search")
 def search_videos(q: str):
     videos = list(videos_collection.find({
@@ -577,9 +534,6 @@ def search_videos(q: str):
                 dev = None
 
         url = v.get("url", "")
-        url_480 = v.get("url_480", "")
-        url_720 = v.get("url_720", "")
-        url_1080 = v.get("url_1080", "")
 
         result.append({
             "id": str(v["_id"]),
@@ -587,9 +541,6 @@ def search_videos(q: str):
             "title": v.get("title", ""),
             "description": v.get("description", ""),
             "url": f"{URL_BASE}/media/videos/{url}" if url else "",
-            "url_480": f"{URL_BASE}/media/videos/{url_480}" if url_480 else "",
-            "url_720": f"{URL_BASE}/media/videos/{url_720}" if url_720 else "",
-            "url_1080": f"{URL_BASE}/media/videos/{url_1080}" if url_1080 else "",
             "thumbnail": v.get("thumbnail", ""),
             "developer_name": dev.get("name", "") if dev else "",
             "developer_avatar": dev.get("avatar", "") if dev else "",
@@ -599,10 +550,12 @@ def search_videos(q: str):
     return result
 
 
+# ===============================
+# Get Video By ID
+# ===============================
 @app.get("/videos/{video_id}")
 def get_video_by_id(video_id: str):
     video = videos_collection.find_one({"_id": safe_object_id(video_id)})
-
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
@@ -616,9 +569,6 @@ def get_video_by_id(video_id: str):
             dev = None
 
     url = video.get("url", "")
-    url_480 = video.get("url_480", "")
-    url_720 = video.get("url_720", "")
-    url_1080 = video.get("url_1080", "")
 
     return {
         "id": str(video["_id"]),
@@ -626,9 +576,6 @@ def get_video_by_id(video_id: str):
         "title": video.get("title", ""),
         "description": video.get("description", ""),
         "url": f"{URL_BASE}/media/videos/{url}" if url else "",
-        "url_480": f"{URL_BASE}/media/videos/{url_480}" if url_480 else "",
-        "url_720": f"{URL_BASE}/media/videos/{url_720}" if url_720 else "",
-        "url_1080": f"{URL_BASE}/media/videos/{url_1080}" if url_1080 else "",
         "thumbnail": video.get("thumbnail", ""),
         "developer_name": dev.get("name", "") if dev else "",
         "developer_avatar": dev.get("avatar", "") if dev else "",
@@ -636,6 +583,9 @@ def get_video_by_id(video_id: str):
     }
 
 
+# ===============================
+# Delete Video
+# ===============================
 @app.delete("/videos/{video_id}")
 def delete_video(video_id: str):
     result = videos_collection.delete_one({"_id": safe_object_id(video_id)})
