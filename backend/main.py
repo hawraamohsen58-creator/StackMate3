@@ -659,8 +659,7 @@ def get_follow_counts(account_id: str):
         "followers_count": followers_count,
         "following_count": following_count
     }
-#جلب المتابعين 
-
+# جلب المتابعين
 @app.get("/followers/{account_id}")
 def get_followers(account_id: str):
     follows = follows_collection.find({
@@ -669,6 +668,7 @@ def get_followers(account_id: str):
     })
 
     result = []
+
     for f in follows:
         acc = accounts_collection.find_one({"_id": safe_object_id(f["follower"])})
         if acc:
@@ -681,7 +681,8 @@ def get_followers(account_id: str):
 
     return result
 
-#جلب المتابعين المتابعهم 
+
+# جلب المتابعين الذين أتابعهم
 @app.get("/following/{account_id}")
 def get_following(account_id: str):
     follows = follows_collection.find({
@@ -690,6 +691,7 @@ def get_following(account_id: str):
     })
 
     result = []
+
     for f in follows:
         acc = accounts_collection.find_one({"_id": safe_object_id(f["following"])})
         if acc:
@@ -701,6 +703,9 @@ def get_following(account_id: str):
             })
 
     return result
+
+
+# فحص ffmpeg
 @app.get("/ffmpeg-check")
 def ffmpeg_check():
     import subprocess
@@ -710,6 +715,10 @@ def ffmpeg_check():
             capture_output=True,
             text=True
         )
-        return {"message": "ffmpeg installed ✅", "output": result.stdout[:200]}
+        return {
+            "message": "ffmpeg installed ✅",
+            "output": result.stdout[:200]
+        }
     except Exception as e:
         return {"error": str(e)}
+
