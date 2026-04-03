@@ -699,7 +699,6 @@ def get_following(account_id: str):
                 "name": acc.get("name", ""),
                 "profile_image": acc.get("profile_image", "")
             })
-            
 
     return result
 @app.get("/ffmpeg-check")
