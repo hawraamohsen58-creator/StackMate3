@@ -51,11 +51,11 @@ URL_BASE = "https://stackmate3.onrender.com"
 # ===============================
 # Email / SMTP Config
 # ===============================
-SMTP_HOST = os.getenv("SMTP_HOST", "")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
-SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USER)
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+SMTP_USER = "hawraamohsen58@gmail.com"
+SMTP_PASS = "zqwqatvyydikoajm"
+SMTP_FROM_EMAIL = SMTP_USER
 
 # ===============================
 # Models
