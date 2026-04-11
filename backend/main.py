@@ -1140,8 +1140,7 @@ def ffmpeg_check():
             "output": result.stdout[:200]
         }
     except Exception as e:
-        return {"error": str(e)}
-# ===============================
+        return {"error": str(e)}# ===============================
 # Chat
 # ===============================
 
@@ -1207,6 +1206,12 @@ def get_user_conversations(user_id: str):
             except Exception:
                 other_user = None
 
+        unread_count = messages_collection.count_documents({
+            "conversation_id": str(conv["_id"]),
+            "receiver_id": user_id,
+            "is_read": False
+        })
+
         result.append({
             "conversation_id": str(conv["_id"]),
             "other_user_id": other_user_id,
@@ -1214,14 +1219,15 @@ def get_user_conversations(user_id: str):
             "username": other_user.get("username", "") if other_user else "",
             "profile_image": other_user.get("profile_image", "") if other_user else "",
             "last_message": conv.get("last_message", ""),
-            "last_message_time": str(conv.get("last_message_time", "")) if conv.get("last_message_time") else ""
+            "last_message_time": conv.get("last_message_time").isoformat() if conv.get("last_message_time") else "",
+            "unread_count": unread_count
         })
 
     return result
 
 
 @app.get("/chat/messages/{conversation_id}")
-def get_conversation_messages(conversation_id: str):
+def get_conversation_messages(conversation_id: str, viewer_id: str = ""):
     conversation = conversations_collection.find_one({
         "_id": safe_object_id(conversation_id)
     })
@@ -1229,12 +1235,25 @@ def get_conversation_messages(conversation_id: str):
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    if viewer_id:
+        messages_collection.update_many(
+            {
+                "conversation_id": conversation_id,
+                "receiver_id": viewer_id,
+                "is_read": False
+            },
+            {
+                "$set": {
+                    "is_read": True
+                }
+            }
+        )
+
     messages = messages_collection.find({
         "conversation_id": conversation_id
     }).sort("created_at", 1)
 
     result = []
-
     for msg in messages:
         result.append({
             "id": str(msg["_id"]),
@@ -1244,7 +1263,7 @@ def get_conversation_messages(conversation_id: str):
             "text": msg.get("text", ""),
             "message_type": msg.get("message_type", "text"),
             "is_read": msg.get("is_read", False),
-            "created_at": str(msg.get("created_at", ""))
+            "created_at": msg.get("created_at").isoformat() if msg.get("created_at") else ""
         })
 
     return result
@@ -1261,11 +1280,14 @@ def send_message(data: MessageCreate):
 
     sender = accounts_collection.find_one({"_id": safe_object_id(data.sender_id)})
     receiver = accounts_collection.find_one({"_id": safe_object_id(data.receiver_id)})
+
     if not sender or not receiver:
         raise HTTPException(status_code=404, detail="Sender or receiver not found")
 
     if not data.text.strip():
         raise HTTPException(status_code=400, detail="Message text cannot be empty")
+
+    now = datetime.utcnow()
 
     message_data = {
         "conversation_id": data.conversation_id,
@@ -1274,7 +1296,7 @@ def send_message(data: MessageCreate):
         "text": data.text.strip(),
         "message_type": data.message_type,
         "is_read": False,
-        "created_at": datetime.utcnow()
+        "created_at": now
     }
 
     result = messages_collection.insert_one(message_data)
@@ -1284,15 +1306,14 @@ def send_message(data: MessageCreate):
         {
             "$set": {
                 "last_message": data.text.strip(),
-                "last_message_time": datetime.utcnow(),
-                "updated_at": datetime.utcnow()
+                "last_message_time": now,
+                "updated_at": now
             }
         }
     )
 
     return {
         "message": "Message sent successfully",
-        "message_id": str(result.inserted_id)
+        "message_id": str(result.inserted_id),
+        "created_at": now.isoformat()
     }
-
-    
