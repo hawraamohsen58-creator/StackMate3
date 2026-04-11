@@ -36,6 +36,7 @@ shorts_collection = db["shorts"]
 follows_collection = db["follows"]
 accounts_collection = db["accounts"]
 reset_codes_collection = db["reset_codes"]
+notifications_collection = db["notifications"]
 
 # ===============================
 # Static Files
@@ -105,6 +106,20 @@ class Follow(BaseModel):
     follower: str
     following: str
     status: str = "accepted"
+
+class FollowToggleRequest(BaseModel):
+    follower_id: str
+    following_id: str
+
+class NotificationCreate(BaseModel):
+    receiver_id: str
+    sender_id: str
+    sender_name: str = ""
+    sender_image: str = ""
+    sender_account_type: str = ""
+    title: str = ""
+    message: str
+    type: str = "follow"
 
 
 class Account(BaseModel):
@@ -589,17 +604,24 @@ def search_developers(q: str):
 @app.get("/developers/{developer_id}")
 def get_developer(developer_id: str):
     dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
-
     if not dev:
         raise HTTPException(status_code=404, detail="Developer not found")
 
+    account_id = dev.get("account_id", "")
+
     followers_count = follows_collection.count_documents({
-        "following": developer_id,
+        "following": account_id,
+        "status": "accepted"
+    })
+
+    following_count = follows_collection.count_documents({
+        "follower": account_id,
         "status": "accepted"
     })
 
     return {
         "id": str(dev["_id"]),
+        "account_id": account_id,
         "name": dev.get("name", ""),
         "job": dev.get("job", ""),
         "location": dev.get("location", ""),
@@ -609,9 +631,9 @@ def get_developer(developer_id: str):
         "portfolio": dev.get("portfolio", ""),
         "bio": dev.get("bio", ""),
         "avatar": dev.get("avatar", ""),
-        "followers_count": followers_count
+        "followers_count": followers_count,
+        "following_count": following_count
     }
-
 
 # ===============================
 # Projects
@@ -946,6 +968,133 @@ def get_following(account_id: str):
                 "name": acc.get("name", ""),
                 "profile_image": acc.get("profile_image", "")
             })
+
+    return result
+@app.get("/follow/status/{follower_id}/{following_id}")
+def get_follow_status(follower_id: str, following_id: str):
+    existing = follows_collection.find_one({
+        "follower": follower_id,
+        "following": following_id,
+        "status": "accepted"
+    })
+    return {"followed": True if existing else False}
+
+
+@app.post("/follow/toggle")
+def toggle_follow(data: FollowToggleRequest):
+    if data.follower_id == data.following_id:
+        raise HTTPException(status_code=400, detail="You cannot follow yourself")
+
+    existing = follows_collection.find_one({
+        "follower": data.follower_id,
+        "following": data.following_id,
+        "status": "accepted"
+    })
+
+    if existing:
+        follows_collection.delete_one({
+            "_id": existing["_id"]
+        })
+        return {
+            "message": "Unfollowed successfully",
+            "followed": False
+        }
+
+    follows_collection.insert_one({
+        "follower": data.follower_id,
+        "following": data.following_id,
+        "status": "accepted",
+        "created_at": datetime.utcnow()
+    })
+
+    return {
+        "message": "Followed successfully",
+        "followed": True
+    }
+
+
+@app.get("/follow/followers/{account_id}")
+def get_followers_new(account_id: str):
+    follows = follows_collection.find({
+        "following": account_id,
+        "status": "accepted"
+    })
+
+    result = []
+    for f in follows:
+        acc = accounts_collection.find_one({"_id": safe_object_id(f["follower"])})
+        if acc:
+            result.append({
+                "id": str(acc["_id"]),
+                "username": acc.get("username", ""),
+                "name": acc.get("name", ""),
+                "profile_image": acc.get("profile_image", ""),
+                "account_type": acc.get("account_type", "")
+            })
+
+    return result
+
+
+@app.get("/follow/following/{account_id}")
+def get_following_new(account_id: str):
+    follows = follows_collection.find({
+        "follower": account_id,
+        "status": "accepted"
+    })
+
+    result = []
+    for f in follows:
+        acc = accounts_collection.find_one({"_id": safe_object_id(f["following"])})
+        if acc:
+            result.append({
+                "id": str(acc["_id"]),
+                "username": acc.get("username", ""),
+                "name": acc.get("name", ""),
+                "profile_image": acc.get("profile_image", ""),
+                "account_type": acc.get("account_type", "")
+            })
+
+    return result
+
+
+@app.post("/notifications/follow")
+def create_follow_notification(data: NotificationCreate):
+    notifications_collection.insert_one({
+        "receiver_id": data.receiver_id,
+        "sender_id": data.sender_id,
+        "sender_name": data.sender_name,
+        "sender_image": data.sender_image,
+        "sender_account_type": data.sender_account_type,
+        "title": data.title,
+        "message": data.message,
+        "type": data.type,
+        "is_read": False,
+        "created_at": datetime.utcnow()
+    })
+    return {"message": "Notification created successfully"}
+
+
+@app.get("/notifications/{user_id}")
+def get_notifications(user_id: str):
+    notifications = notifications_collection.find({
+        "receiver_id": user_id
+    }).sort("created_at", -1)
+
+    result = []
+    for n in notifications:
+        result.append({
+            "id": str(n["_id"]),
+            "receiver_id": n.get("receiver_id", ""),
+            "sender_id": n.get("sender_id", ""),
+            "sender_name": n.get("sender_name", ""),
+            "sender_image": n.get("sender_image", ""),
+            "sender_account_type": n.get("sender_account_type", ""),
+            "title": n.get("title", ""),
+            "message": n.get("message", ""),
+            "type": n.get("type", ""),
+            "is_read": n.get("is_read", False),
+            "created_at": str(n.get("created_at", ""))
+        })
 
     return result
 
