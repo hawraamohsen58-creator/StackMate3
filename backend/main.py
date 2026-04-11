@@ -1166,12 +1166,14 @@ def create_or_get_conversation(data: ConversationCreate):
             "conversation_id": str(existing_conversation["_id"])
         }
 
+    now = datetime.utcnow()
+
     conversation_data = {
         "participants": [data.sender_id, data.receiver_id],
         "last_message": "",
         "last_message_time": None,
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow()
+        "created_at": now,
+        "updated_at": now
     }
 
     result = conversations_collection.insert_one(conversation_data)
@@ -1202,7 +1204,9 @@ def get_user_conversations(user_id: str):
         other_user = None
         if other_user_id:
             try:
-                other_user = accounts_collection.find_one({"_id": safe_object_id(other_user_id)})
+                other_user = accounts_collection.find_one({
+                    "_id": safe_object_id(other_user_id)
+                })
             except Exception:
                 other_user = None
 
@@ -1219,7 +1223,7 @@ def get_user_conversations(user_id: str):
             "username": other_user.get("username", "") if other_user else "",
             "profile_image": other_user.get("profile_image", "") if other_user else "",
             "last_message": conv.get("last_message", ""),
-            "last_message_time": conv.get("last_message_time").isoformat() if conv.get("last_message_time") else "",
+            "last_message_time": conv.get("last_message_time").isoformat() + "Z" if conv.get("last_message_time") else "",
             "unread_count": unread_count
         })
 
@@ -1263,7 +1267,7 @@ def get_conversation_messages(conversation_id: str, viewer_id: str = ""):
             "text": msg.get("text", ""),
             "message_type": msg.get("message_type", "text"),
             "is_read": msg.get("is_read", False),
-            "created_at": msg.get("created_at").isoformat() if msg.get("created_at") else ""
+            "created_at": msg.get("created_at").isoformat() + "Z" if msg.get("created_at") else ""
         })
 
     return result
@@ -1315,5 +1319,5 @@ def send_message(data: MessageCreate):
     return {
         "message": "Message sent successfully",
         "message_id": str(result.inserted_id),
-        "created_at": now.isoformat()
+        "created_at": now.isoformat() + "Z"
     }
