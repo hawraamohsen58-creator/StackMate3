@@ -806,6 +806,7 @@ def delete_video(video_id: str):
 # ===============================
 # Follow
 # ===============================
+
 @app.post("/follow")
 def follow_user(follow: Follow):
     if follow.follower == follow.following:
@@ -819,10 +820,12 @@ def follow_user(follow: Follow):
 
     if existing:
         return {"message": "Already following"}
+
     follows_collection.insert_one({
         "follower": follow.follower,
         "following": follow.following,
-        "status": "accepted"
+        "status": "accepted",
+        "created_at": datetime.utcnow()
     })
 
     return {"message": "Followed successfully"}
@@ -897,7 +900,6 @@ def get_followers(account_id: str):
     })
 
     result = []
-
     for f in follows:
         acc = accounts_collection.find_one({"_id": safe_object_id(f["follower"])})
         if acc:
@@ -919,7 +921,6 @@ def get_following(account_id: str):
     })
 
     result = []
-
     for f in follows:
         acc = accounts_collection.find_one({"_id": safe_object_id(f["following"])})
         if acc:
@@ -931,6 +932,8 @@ def get_following(account_id: str):
             })
 
     return result
+
+
 @app.get("/follow/status/{follower_id}/{following_id}")
 def get_follow_status(follower_id: str, following_id: str):
     existing = follows_collection.find_one({
@@ -938,6 +941,7 @@ def get_follow_status(follower_id: str, following_id: str):
         "following": following_id,
         "status": "accepted"
     })
+
     return {"followed": True if existing else False}
 
 
@@ -951,7 +955,6 @@ def toggle_follow(data: FollowToggleRequest):
         "following": data.following_id,
         "status": "accepted"
     })
-
     if existing:
         follows_collection.delete_one({
             "_id": existing["_id"]
@@ -985,12 +988,22 @@ def get_followers_new(account_id: str):
     for f in follows:
         acc = accounts_collection.find_one({"_id": safe_object_id(f["follower"])})
         if acc:
+            developer_profile_id = ""
+
+            if acc.get("account_type") == "developer":
+                dev = developers_collection.find_one({
+                    "account_id": str(acc["_id"])
+                })
+                if dev:
+                    developer_profile_id = str(dev["_id"])
+
             result.append({
                 "id": str(acc["_id"]),
                 "username": acc.get("username", ""),
                 "name": acc.get("name", ""),
                 "profile_image": acc.get("profile_image", ""),
-                "account_type": acc.get("account_type", "")
+                "account_type": acc.get("account_type", ""),
+                "developer_profile_id": developer_profile_id
             })
 
     return result
@@ -1007,12 +1020,22 @@ def get_following_new(account_id: str):
     for f in follows:
         acc = accounts_collection.find_one({"_id": safe_object_id(f["following"])})
         if acc:
+            developer_profile_id = ""
+
+            if acc.get("account_type") == "developer":
+                dev = developers_collection.find_one({
+                    "account_id": str(acc["_id"])
+                })
+                if dev:
+                    developer_profile_id = str(dev["_id"])
+
             result.append({
                 "id": str(acc["_id"]),
                 "username": acc.get("username", ""),
                 "name": acc.get("name", ""),
                 "profile_image": acc.get("profile_image", ""),
-                "account_type": acc.get("account_type", "")
+                "account_type": acc.get("account_type", ""),
+                "developer_profile_id": developer_profile_id
             })
 
     return result
@@ -1032,6 +1055,7 @@ def create_follow_notification(data: NotificationCreate):
         "is_read": False,
         "created_at": datetime.utcnow()
     })
+
     return {"message": "Notification created successfully"}
 
 
