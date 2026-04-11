@@ -38,6 +38,11 @@ reset_codes_collection = db["reset_codes"]
 notifications_collection = db["notifications"]
 
 # ===============================
+# Chat Collections (NEW)
+# ===============================
+conversations_collection = db["conversations"]
+messages_collection = db["messages"]
+# ===============================
 # Static Files
 # ===============================
 os.makedirs("videos", exist_ok=True)
@@ -56,10 +61,10 @@ SMTP_PORT = 587
 SMTP_USER = "hawraamohsen58@gmail.com"
 SMTP_PASS = "zqwqatvyydikoajm"
 SMTP_FROM_EMAIL = SMTP_USER
-
 # ===============================
 # Models
 # ===============================
+
 class Developer(BaseModel):
     name: str
     skill: str
@@ -93,14 +98,18 @@ class Video(BaseModel):
     url_1080: str = ""
     thumbnail: str = ""
     views: int = 0
+
+
 class Follow(BaseModel):
     follower: str
     following: str
     status: str = "accepted"
 
+
 class FollowToggleRequest(BaseModel):
     follower_id: str
     following_id: str
+
 
 class NotificationCreate(BaseModel):
     receiver_id: str
@@ -163,6 +172,23 @@ class ResetPasswordRequest(BaseModel):
     email_or_phone: str
     code: str
     new_password: str
+
+
+# ===============================
+# Chat Models (NEW)
+# ===============================
+
+class ConversationCreate(BaseModel):
+    sender_id: str
+    receiver_id: str
+
+
+class MessageCreate(BaseModel):
+    conversation_id: str
+    sender_id: str
+    receiver_id: str
+    text: str
+    message_type: str = "text"
 
 
 # ===============================
@@ -1098,8 +1124,6 @@ def get_notifications(user_id: str):
         })
 
     return result
-
-
 # ===============================
 # TEST FFMPEG
 # ===============================
@@ -1117,4 +1141,158 @@ def ffmpeg_check():
         }
     except Exception as e:
         return {"error": str(e)}
+# ===============================
+# Chat
+# ===============================
+
+@app.post("/chat/conversation")
+def create_or_get_conversation(data: ConversationCreate):
+    if data.sender_id == data.receiver_id:
+        raise HTTPException(status_code=400, detail="You cannot chat with yourself")
+
+    sender = accounts_collection.find_one({"_id": safe_object_id(data.sender_id)})
+    receiver = accounts_collection.find_one({"_id": safe_object_id(data.receiver_id)})
+
+    if not sender or not receiver:
+        raise HTTPException(status_code=404, detail="Sender or receiver not found")
+
+    existing_conversation = conversations_collection.find_one({
+        "participants": {"$all": [data.sender_id, data.receiver_id]},
+        "$expr": {"$eq": [{"$size": "$participants"}, 2]}
+    })
+
+    if existing_conversation:
+        return {
+            "message": "Conversation already exists",
+            "conversation_id": str(existing_conversation["_id"])
+        }
+
+    conversation_data = {
+        "participants": [data.sender_id, data.receiver_id],
+        "last_message": "",
+        "last_message_time": None,
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow()
+    }
+
+    result = conversations_collection.insert_one(conversation_data)
+
+    return {
+        "message": "Conversation created successfully",
+        "conversation_id": str(result.inserted_id)
+    }
+
+
+@app.get("/chat/conversations/{user_id}")
+def get_user_conversations(user_id: str):
+    conversations = conversations_collection.find({
+        "participants": user_id
+    }).sort("updated_at", -1)
+
+    result = []
+
+    for conv in conversations:
+        participants = conv.get("participants", [])
+        other_user_id = ""
+
+        for participant in participants:
+            if participant != user_id:
+                other_user_id = participant
+                break
+
+        other_user = None
+        if other_user_id:
+            try:
+                other_user = accounts_collection.find_one({"_id": safe_object_id(other_user_id)})
+            except Exception:
+                other_user = None
+
+        result.append({
+            "conversation_id": str(conv["_id"]),
+            "other_user_id": other_user_id,
+            "name": other_user.get("name", "") if other_user else "",
+            "username": other_user.get("username", "") if other_user else "",
+            "profile_image": other_user.get("profile_image", "") if other_user else "",
+            "last_message": conv.get("last_message", ""),
+            "last_message_time": str(conv.get("last_message_time", "")) if conv.get("last_message_time") else ""
+        })
+
+    return result
+
+
+@app.get("/chat/messages/{conversation_id}")
+def get_conversation_messages(conversation_id: str):
+    conversation = conversations_collection.find_one({
+        "_id": safe_object_id(conversation_id)
+    })
+
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    messages = messages_collection.find({
+        "conversation_id": conversation_id
+    }).sort("created_at", 1)
+
+    result = []
+
+    for msg in messages:
+        result.append({
+            "id": str(msg["_id"]),
+            "conversation_id": msg.get("conversation_id", ""),
+            "sender_id": msg.get("sender_id", ""),
+            "receiver_id": msg.get("receiver_id", ""),
+            "text": msg.get("text", ""),
+            "message_type": msg.get("message_type", "text"),
+            "is_read": msg.get("is_read", False),
+            "created_at": str(msg.get("created_at", ""))
+        })
+
+    return result
+
+
+@app.post("/chat/message")
+def send_message(data: MessageCreate):
+    conversation = conversations_collection.find_one({
+        "_id": safe_object_id(data.conversation_id)
+    })
+
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    sender = accounts_collection.find_one({"_id": safe_object_id(data.sender_id)})
+    receiver = accounts_collection.find_one({"_id": safe_object_id(data.receiver_id)})
+    if not sender or not receiver:
+        raise HTTPException(status_code=404, detail="Sender or receiver not found")
+
+    if not data.text.strip():
+        raise HTTPException(status_code=400, detail="Message text cannot be empty")
+
+    message_data = {
+        "conversation_id": data.conversation_id,
+        "sender_id": data.sender_id,
+        "receiver_id": data.receiver_id,
+        "text": data.text.strip(),
+        "message_type": data.message_type,
+        "is_read": False,
+        "created_at": datetime.utcnow()
+    }
+
+    result = messages_collection.insert_one(message_data)
+
+    conversations_collection.update_one(
+        {"_id": safe_object_id(data.conversation_id)},
+        {
+            "$set": {
+                "last_message": data.text.strip(),
+                "last_message_time": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+
+    return {
+        "message": "Message sent successfully",
+        "message_id": str(result.inserted_id)
+    }
+
     
