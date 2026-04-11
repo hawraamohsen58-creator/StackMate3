@@ -32,7 +32,6 @@ db = client["test"]
 developers_collection = db["developers"]
 projects_collection = db["projects"]
 videos_collection = db["videos"]
-shorts_collection = db["shorts"]
 follows_collection = db["follows"]
 accounts_collection = db["accounts"]
 reset_codes_collection = db["reset_codes"]
@@ -94,14 +93,6 @@ class Video(BaseModel):
     url_1080: str = ""
     thumbnail: str = ""
     views: int = 0
-
-
-class Short(BaseModel):
-    developer_id: str
-    title: str
-    url: str
-
-
 class Follow(BaseModel):
     follower: str
     following: str
@@ -812,36 +803,6 @@ def delete_video(video_id: str):
         raise HTTPException(status_code=404, detail="Video not found")
 
     return {"message": "Video deleted"}
-
-
-# ===============================
-# Shorts
-# ===============================
-@app.post("/shorts")
-def add_short(short: Short):
-    shorts_collection.insert_one(short.dict())
-    return {"message": "Short added"}
-
-
-@app.get("/developers/{developer_id}/shorts")
-def get_shorts(developer_id: str):
-    shorts = list(shorts_collection.find({"developer_id": developer_id}))
-    result = []
-    dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
-
-    for s in shorts:
-        result.append({
-            "id": str(s["_id"]),
-            "title": s.get("title", ""),
-            "url": f"{URL_BASE}/media/videos/{s.get('url', '')}",
-            "developer_name": dev.get("name", "") if dev else "",
-            "developer_avatar": dev.get("avatar", "") if dev else "",
-            "likes": 0
-        })
-
-    return result
-
-
 # ===============================
 # Follow
 # ===============================
