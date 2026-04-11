@@ -524,6 +524,7 @@ def reset_password(data: ResetPasswordRequest):
 # ===============================
 # Developers
 # ===============================
+
 @app.post("/developers")
 def add_developer(dev: Developer):
     developers_collection.insert_one({
@@ -547,17 +548,25 @@ def get_developers():
     result = []
 
     for dev in developers:
+        account_id = dev.get("account_id", "")
+
         followers_count = follows_collection.count_documents({
-            "following": str(dev["_id"]),
+            "following": account_id,
             "status": "accepted"
         })
 
         result.append({
             "id": str(dev["_id"]),
+            "account_id": account_id,
             "name": dev.get("name", ""),
             "skill": dev.get("skill", ""),
             "bio": dev.get("bio", ""),
             "avatar": dev.get("avatar", ""),
+            "job": dev.get("job", ""),
+            "location": dev.get("location", ""),
+            "experience": dev.get("experience", ""),
+            "technologies": dev.get("technologies", ""),
+            "portfolio": dev.get("portfolio", ""),
             "followers_count": followers_count
         })
 
@@ -574,18 +583,26 @@ def search_developers(q: str):
     })
 
     result = []
-
     for dev in developers:
+        account_id = dev.get("account_id", "")
+
         followers_count = follows_collection.count_documents({
-            "following": str(dev["_id"]),
+            "following": account_id,
             "status": "accepted"
         })
+
         result.append({
             "id": str(dev["_id"]),
+            "account_id": account_id,
             "name": dev.get("name", ""),
             "skill": dev.get("skill", ""),
             "bio": dev.get("bio", ""),
             "avatar": dev.get("avatar", ""),
+            "job": dev.get("job", ""),
+            "location": dev.get("location", ""),
+            "experience": dev.get("experience", ""),
+            "technologies": dev.get("technologies", ""),
+            "portfolio": dev.get("portfolio", ""),
             "followers_count": followers_count
         })
 
@@ -625,7 +642,6 @@ def get_developer(developer_id: str):
         "followers_count": followers_count,
         "following_count": following_count
     }
-
 # ===============================
 # Projects
 # ===============================
