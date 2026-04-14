@@ -5,6 +5,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 from datetime import datetime, timedelta
 from email.message import EmailMessage
+
 import certifi
 import os
 import shutil
@@ -13,7 +14,25 @@ import uuid
 import random
 import smtplib
 
+import cloudinary
+import cloudinary.uploader
+
 app = FastAPI()
+
+cloudinary.config(
+    cloud_name="drjpfr75p",
+    api_key="318563638924659",
+    api_secret="tycwgqDQV70EqM-xuHw_DfA7OrE"
+)
+@app.post("/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    try:
+        result = cloudinary.uploader.upload(file.file)
+        return {
+            "url": result["secure_url"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ===============================
 # MongoDB Connection
