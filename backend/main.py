@@ -33,6 +33,19 @@ async def upload_image(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/upload-video")
+async def upload_video(file: UploadFile = File(...)):
+    try:
+        result = cloudinary.uploader.upload(
+            file.file,
+            resource_type="video"
+        )
+        return {
+            "url": result["secure_url"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ===============================
 # MongoDB Connection
