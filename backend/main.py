@@ -16,7 +16,7 @@ import smtplib
 
 import cloudinary
 import cloudinary.uploader
-
+from openai import OpenAI
 app = FastAPI()
 
 cloudinary.config(
@@ -24,6 +24,9 @@ cloudinary.config(
     api_key="318563638924659",
     api_secret="tycwgqDQV70EqM-xuHw_DfA7OrE"
 )
+
+client_ai = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
 
 @app.post("/upload-image")
 async def upload_image(file: UploadFile = File(...)):
@@ -49,7 +52,6 @@ async def upload_video_to_cloud(file: UploadFile = File(...)):
         return {"url": result["secure_url"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 # ===============================
 # MongoDB Connection
 # ===============================
@@ -244,7 +246,45 @@ class VideoDislike(BaseModel):
 class VideoSave(BaseModel):
     user_id: str
     video_id: str
+# ===============================
+# AI Model (NEW)
+# ===============================
+class AIChatRequest(BaseModel):
+    message: str
+# ===============================
+# AI CHAT ENDPOINT
+# ===============================
+@app.post("/ai/chat")
+def ai_chat(data: AIChatRequest):
+    try:
+        user_message = data.message.strip()
 
+        if not user_message:
+            raise HTTPException(status_code=400, detail="Message is required")
+
+        system_prompt = """
+        You are StackMate AI.
+        Help users find the right programmer.
+
+        - Suggest developers by skill (frontend, backend, mobile).
+        - Explain technologies simply.
+        - Be short and clear.
+        """
+
+        response = client_ai.responses.create(
+            model="gpt-5.4",
+            input=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ]
+        )
+
+        return {
+            "reply": response.output_text
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ===============================
 # Helper
