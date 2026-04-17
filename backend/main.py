@@ -24,26 +24,29 @@ cloudinary.config(
     api_key="318563638924659",
     api_secret="tycwgqDQV70EqM-xuHw_DfA7OrE"
 )
+
 @app.post("/upload-image")
 async def upload_image(file: UploadFile = File(...)):
     try:
-        result = cloudinary.uploader.upload(file.file)
-        return {
-            "url": result["secure_url"]
-        }
+        result = cloudinary.uploader.upload(
+            file.file,
+            resource_type="image",
+            folder="stackmate/images"
+        )
+        return {"url": result["secure_url"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
 @app.post("/upload-video")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video_to_cloud(file: UploadFile = File(...)):
     try:
         result = cloudinary.uploader.upload(
             file.file,
-            resource_type="video"
+            resource_type="video",
+            folder="stackmate/videos"
         )
-        return {
-            "url": result["secure_url"]
-        }
+        return {"url": result["secure_url"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -68,6 +71,10 @@ follows_collection = db["follows"]
 accounts_collection = db["accounts"]
 reset_codes_collection = db["reset_codes"]
 notifications_collection = db["notifications"]
+
+video_likes_collection = db["video_likes"]
+video_dislikes_collection = db["video_dislikes"]
+video_saves_collection = db["video_saves"]
 
 # ===============================
 # Chat Collections (NEW)
@@ -204,8 +211,7 @@ class ResetPasswordRequest(BaseModel):
     email_or_phone: str
     code: str
     new_password: str
-
-
+    
 # ===============================
 # Chat Models (NEW)
 # ===============================
@@ -221,6 +227,23 @@ class MessageCreate(BaseModel):
     receiver_id: str
     text: str
     message_type: str = "text"
+    # ===============================
+# Video Interactions Models
+# ===============================
+
+class VideoLike(BaseModel):
+    user_id: str
+    video_id: str
+
+
+class VideoDislike(BaseModel):
+    user_id: str
+    video_id: str
+
+
+class VideoSave(BaseModel):
+    user_id: str
+    video_id: str
 
 
 # ===============================
@@ -833,8 +856,6 @@ def search_videos(q: str):
         })
 
     return result
-
-
 @app.get("/videos/{video_id}")
 def get_video_by_id(video_id: str):
     video = videos_collection.find_one({"_id": safe_object_id(video_id)})
@@ -847,10 +868,13 @@ def get_video_by_id(video_id: str):
 
     if developer_id:
         try:
-            dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
+            dev = developers_collection.find_one(
+                {"_id": safe_object_id(developer_id)}
+            )
         except Exception:
             dev = None
-            return {
+
+    return {
         "id": str(video["_id"]),
         "developer_id": developer_id,
         "title": video.get("title", ""),
@@ -1166,7 +1190,8 @@ def ffmpeg_check():
             "output": result.stdout[:200]
         }
     except Exception as e:
-        return {"error": str(e)}# ===============================
+        return {"error": str(e)}
+# ===============================
 # Chat
 # ===============================
 
@@ -1346,4 +1371,158 @@ def send_message(data: MessageCreate):
         "message": "Message sent successfully",
         "message_id": str(result.inserted_id),
         "created_at": now.isoformat() + "Z"
+    }
+# ===============================
+# Video Player Interactions
+# ===============================
+
+@app.get("/video-interactions/status")
+def get_video_interaction_status(video_id: str, user_id: str):
+    liked = video_likes_collection.find_one({
+        "video_id": video_id,
+        "user_id": user_id
+    })
+
+    disliked = video_dislikes_collection.find_one({
+        "video_id": video_id,
+        "user_id": user_id
+    })
+
+    saved = video_saves_collection.find_one({
+        "video_id": video_id,
+        "user_id": user_id
+    })
+
+    return {
+        "liked": True if liked else False,
+        "disliked": True if disliked else False,
+        "saved": True if saved else False
+    }
+
+
+# ===============================
+# LIKE
+# ===============================
+@app.post("/video-interactions/like")
+def toggle_like(data: VideoLike):
+    video = videos_collection.find_one({"_id": safe_object_id(data.video_id)})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    existing_like = video_likes_collection.find_one({
+        "video_id": data.video_id,
+        "user_id": data.user_id
+    })
+
+    if existing_like:
+        video_likes_collection.delete_one({"_id": existing_like["_id"]})
+        return {"message": "Like removed", "liked": False}
+
+    # نحذف dislike إذا موجود
+    video_dislikes_collection.delete_many({
+        "video_id": data.video_id,
+        "user_id": data.user_id
+    })
+
+    video_likes_collection.insert_one({
+        "video_id": data.video_id,
+        "user_id": data.user_id,
+        "created_at": datetime.utcnow()
+    })
+
+    return {"message": "Video liked", "liked": True}
+
+
+# ===============================
+# DISLIKE
+# ===============================
+@app.post("/video-interactions/dislike")
+def toggle_dislike(data: VideoDislike):
+    video = videos_collection.find_one({"_id": safe_object_id(data.video_id)})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    existing_dislike = video_dislikes_collection.find_one({
+        "video_id": data.video_id,
+        "user_id": data.user_id
+    })
+
+    if existing_dislike:
+        video_dislikes_collection.delete_one({"_id": existing_dislike["_id"]})
+        return {"message": "Dislike removed", "disliked": False}
+
+    # نحذف like إذا موجود
+    video_likes_collection.delete_many({
+        "video_id": data.video_id,
+        "user_id": data.user_id
+    })
+
+    video_dislikes_collection.insert_one({
+        "video_id": data.video_id,
+        "user_id": data.user_id,
+        "created_at": datetime.utcnow()
+    })
+
+    return {"message": "Video disliked", "disliked": True}
+
+
+# ===============================
+# SAVE
+# ===============================
+@app.post("/video-interactions/save")
+def save_video(data: VideoSave):
+    video = videos_collection.find_one({"_id": safe_object_id(data.video_id)})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    existing_save = video_saves_collection.find_one({
+        "video_id": data.video_id,
+        "user_id": data.user_id
+    })
+
+    if existing_save:
+        return {"message": "Already saved", "saved": True}
+
+    video_saves_collection.insert_one({
+        "video_id": data.video_id,
+        "user_id": data.user_id,
+        "created_at": datetime.utcnow()
+    })
+
+    return {"message": "Saved", "saved": True}
+
+
+# ===============================
+# UNSAVE (بدل DELETE)
+# ===============================
+@app.post("/video-interactions/unsave")
+def unsave_video(data: VideoSave):
+    result = video_saves_collection.delete_one({
+        "video_id": data.video_id,
+        "user_id": data.user_id
+    })
+
+    if result.deleted_count == 0:
+        return {"message": "Not saved", "saved": False}
+
+    return {"message": "Unsaved", "saved": False}
+# ===============================
+# VIEWS
+# ===============================
+@app.post("/videos/{video_id}/view")
+def increment_video_view(video_id: str):
+    video = videos_collection.find_one({"_id": safe_object_id(video_id)})
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    videos_collection.update_one(
+        {"_id": safe_object_id(video_id)},
+        {"$inc": {"views": 1}}
+    )
+
+    updated_video = videos_collection.find_one({"_id": safe_object_id(video_id)})
+
+    return {
+        "message": "View added",
+        "views": updated_video.get("views", 0)
     }
