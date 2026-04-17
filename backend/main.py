@@ -83,7 +83,7 @@ os.makedirs("thumbnails", exist_ok=True)
 app.mount("/media/videos", StaticFiles(directory="videos"), name="media_videos")
 app.mount("/thumbnails", StaticFiles(directory="thumbnails"), name="thumbnails")
 
-URL_BASE = "https://stackmate3.onrender.com"
+URL_BASE = "https://stackmate4.onrender.com"
 
 # ===============================
 # Email / SMTP Config
