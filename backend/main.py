@@ -745,40 +745,39 @@ def upload_video(
     file: UploadFile = File(...),
     thumbnail: UploadFile = File(None)
 ):
-    os.makedirs("videos", exist_ok=True)
-    os.makedirs("thumbnails", exist_ok=True)
-
     dev = developers_collection.find_one({"account_id": developer_id})
     if not dev:
         raise HTTPException(status_code=404, detail="Developer not found")
 
-    unique_id = str(uuid.uuid4())
-    video_filename = f"{unique_id}.mp4"
-    video_path = os.path.join("videos", video_filename)
+    try:
+        video_result = cloudinary.uploader.upload(
+            file.file,
+            resource_type="video",
+            folder="stackmate/videos"
+        )
 
-    with open(video_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        thumbnail_url = ""
+        if thumbnail:
+            thumbnail_result = cloudinary.uploader.upload(
+                thumbnail.file,
+                resource_type="image",
+                folder="stackmate/thumbnails"
+            )
+            thumbnail_url = thumbnail_result.get("secure_url", "")
 
-    thumbnail_url = ""
-    if thumbnail:
-        thumb_filename = f"{unique_id}_thumb.jpg"
-        thumb_path = os.path.join("thumbnails", thumb_filename)
+        videos_collection.insert_one({
+            "developer_id": str(dev["_id"]),
+            "title": title,
+            "description": description,
+            "url": video_result.get("secure_url", ""),
+            "thumbnail": thumbnail_url,
+            "views": 0
+        })
 
-        with open(thumb_path, "wb") as buffer:
-            shutil.copyfileobj(thumbnail.file, buffer)
+        return {"message": "Video uploaded successfully ✅"}
 
-        thumbnail_url = f"{URL_BASE}/thumbnails/{thumb_filename}"
-
-    videos_collection.insert_one({
-        "developer_id": str(dev["_id"]),
-        "title": title,
-        "description": description,
-        "url": video_filename,
-        "thumbnail": thumbnail_url,
-        "views": 0
-    })
-
-    return {"message": "Video uploaded successfully ✅"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/developers/{developer_id}/videos")
@@ -788,12 +787,12 @@ def get_videos(developer_id: str):
     dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
 
     for v in videos:
-        url = v.get("url", "")
-        result.append({"id": str(v["_id"]),
+        result.append({
+            "id": str(v["_id"]),
             "developer_id": v.get("developer_id", ""),
             "title": v.get("title", ""),
             "description": v.get("description", ""),
-            "url": f"{URL_BASE}/media/videos/{url}" if url else "",
+            "url": v.get("url", ""),
             "thumbnail": v.get("thumbnail", ""),
             "developer_name": dev.get("name", "") if dev else "",
             "developer_avatar": dev.get("avatar", "") if dev else "",
@@ -821,14 +820,12 @@ def search_videos(q: str):
             except Exception:
                 dev = None
 
-        url = v.get("url", "")
-
         result.append({
             "id": str(v["_id"]),
             "developer_id": developer_id,
             "title": v.get("title", ""),
             "description": v.get("description", ""),
-            "url": f"{URL_BASE}/media/videos/{url}" if url else "",
+            "url": v.get("url", ""),
             "thumbnail": v.get("thumbnail", ""),
             "developer_name": dev.get("name", "") if dev else "",
             "developer_avatar": dev.get("avatar", "") if dev else "",
@@ -853,15 +850,12 @@ def get_video_by_id(video_id: str):
             dev = developers_collection.find_one({"_id": safe_object_id(developer_id)})
         except Exception:
             dev = None
-
-    url = video.get("url", "")
-
-    return {
+            return {
         "id": str(video["_id"]),
         "developer_id": developer_id,
         "title": video.get("title", ""),
         "description": video.get("description", ""),
-        "url": f"{URL_BASE}/media/videos/{url}" if url else "",
+        "url": video.get("url", ""),
         "thumbnail": video.get("thumbnail", ""),
         "developer_name": dev.get("name", "") if dev else "",
         "developer_avatar": dev.get("avatar", "") if dev else "",
