@@ -5,3 +5,4 @@ dnspython
 python-multipart==0.0.6
 certifi
 cloudinary
+requests
