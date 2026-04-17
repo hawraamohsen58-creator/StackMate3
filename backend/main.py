@@ -7,16 +7,18 @@ from datetime import datetime, timedelta
 from email.message import EmailMessage
 
 import certifi
-import os
 import shutil
 import subprocess
 import uuid
 import random
 import smtplib
+import os
+import re
+import requests
+from fastapi import Body, HTTPException
 
 import cloudinary
 import cloudinary.uploader
-
 app = FastAPI()
 
 cloudinary.config(
@@ -24,6 +26,9 @@ cloudinary.config(
     api_key="318563638924659",
     api_secret="tycwgqDQV70EqM-xuHw_DfA7OrE"
 )
+
+
+
 
 @app.post("/upload-image")
 async def upload_image(file: UploadFile = File(...)):
@@ -49,7 +54,6 @@ async def upload_video_to_cloud(file: UploadFile = File(...)):
         return {"url": result["secure_url"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 # ===============================
 # MongoDB Connection
 # ===============================
@@ -227,7 +231,9 @@ class MessageCreate(BaseModel):
     receiver_id: str
     text: str
     message_type: str = "text"
-    # ===============================
+    
+    
+# ===============================
 # Video Interactions Models
 # ===============================
 
@@ -244,8 +250,6 @@ class VideoDislike(BaseModel):
 class VideoSave(BaseModel):
     user_id: str
     video_id: str
-
-
 # ===============================
 # Helper
 # ===============================
@@ -1526,3 +1530,180 @@ def increment_video_view(video_id: str):
         "message": "View added",
         "views": updated_video.get("views", 0)
     }
+
+# ===============================
+# AI Search Endpoint
+# ===============================
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+SEARCH_SYNONYMS = {
+    "شبكات": ["شبكات", "مهندس شبكات", "network", "networks", "networking", "cisco", "routing", "switching", "mikrotik"],
+    "network": ["شبكات", "مهندس شبكات", "network", "networks", "networking", "cisco", "routing", "switching", "mikrotik"],
+    "ai": ["ai", "artificial intelligence", "machine learning", "deep learning", "ذكاء اصطناعي", "neural network"],
+    "ذكاء اصطناعي": ["ai", "artificial intelligence", "machine learning", "deep learning", "ذكاء اصطناعي", "neural network"],
+    "frontend": ["frontend", "front-end", "react", "html", "css", "javascript", "واجهات"],
+    "backend": ["backend", "back-end", "python", "fastapi", "node", "api", "خلفية"],
+    "mobile": ["mobile", "flutter", "react native", "android", "ios", "تطبيقات"],
+    "python": ["python", "fastapi", "django", "flask"],
+    "رياضيات": ["رياضيات", "math", "mathematics", "numerical analysis", "statistics"]
+}
+
+
+@app.post("/ai-search")
+async def ai_search(prompt: str = Body(...)):
+    try:
+        if not prompt or not str(prompt).strip():
+            raise HTTPException(status_code=400, detail="Prompt is required")
+
+        user_prompt = str(prompt).strip()
+        user_prompt_lower = user_prompt.lower()
+
+        # 1) AI يفهم المطلوب ويطلع كلمة أساسية
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        ai_data = {
+            "model": "gpt-5-mini",
+            "input": f"""
+You are helping a developer search system.
+
+User request:
+{user_prompt}
+
+Return only ONE short search keyword for programmer skill.
+
+Examples:
+frontend
+backend
+ai
+machine learning
+networks
+cybersecurity
+mobile
+react native
+flutter
+python
+data science
+math
+
+Return ONLY the keyword.
+"""
+        }
+
+        ai_response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers=headers,
+            json=ai_data,
+            timeout=60
+        )
+
+        if ai_response.status_code != 200:
+            raise HTTPException(status_code=500, detail="AI request failed")
+
+        ai_result = ai_response.json()
+
+        ai_keyword = (
+            ai_result.get("output", [{}])[0]
+            .get("content", [{}])[0]
+            .get("text", "")
+            .strip()
+            .lower()
+        )
+
+        if not ai_keyword:
+            ai_keyword = user_prompt_lower
+
+        # 2) نبني كلمات البحث الموسعة
+        expanded_keywords = set()
+        expanded_keywords.add(ai_keyword)
+        expanded_keywords.add(user_prompt_lower)
+
+        for key, values in SEARCH_SYNONYMS.items():
+            if key in user_prompt_lower or key in ai_keyword:
+                for v in values:
+                    expanded_keywords.add(v.lower())
+
+        # إذا المستخدم كتب شيء مباشر مثل React أو Python
+        words = re.findall(r"[\w\u0600-\u06FF\-\+]+", user_prompt_lower)
+        for w in words:
+            expanded_keywords.add(w)
+
+        # 3) نجهز regex query على أكثر من حقل
+        regex_conditions = []
+        for kw in expanded_keywords:
+            regex_conditions.extend([
+                {"skill": {"$regex": kw, "$options": "i"}},
+                {"technologies": {"$regex": kw, "$options": "i"}},
+                {"bio": {"$regex": kw, "$options": "i"}},
+                {"name": {"$regex": kw, "$options": "i"}},
+                {"job": {"$regex": kw, "$options": "i"}}
+            ])
+
+        regex_query = {"$or": regex_conditions}
+
+        developers = list(developers_collection.find(regex_query))
+
+        if not developers:
+            return {
+                "reply": f"No developers found for: {user_prompt}",
+                "keyword": ai_keyword,
+                "developers": []
+            }
+
+        ranked_developers = []
+
+        for dev in developers:
+            dev_id = str(dev["_id"])
+
+            dev_videos = list(videos_collection.find({"developer_id": dev_id}))
+            video_ids = [str(v["_id"]) for v in dev_videos]
+            total_views = sum(v.get("views", 0) for v in dev_videos)
+
+            total_likes = 0
+            if video_ids:
+                total_likes = video_likes_collection.count_documents({
+                    "video_id": {"$in": video_ids}
+                })
+
+            score = total_views + (total_likes * 5)
+
+            ranked_developers.append({
+                "id": dev_id,
+                "account_id": dev.get("account_id", ""),
+                "name": dev.get("name", ""),
+                "skill": dev.get("skill", ""),
+                "job": dev.get("job", ""),
+                "bio": dev.get("bio", ""),
+                "avatar": dev.get("avatar", ""),
+                "technologies": dev.get("technologies", ""),
+                "portfolio": dev.get("portfolio", ""),
+                "location": dev.get("location", ""),
+                "experience": dev.get("experience", ""),
+                "views": total_views,
+                "likes": total_likes,
+                "score": score
+            })
+
+        ranked_developers.sort(key=lambda x: x["score"], reverse=True)
+
+        top_developers = ranked_developers[:5]
+
+        lines = [f"Best developers for '{user_prompt}':"]
+        for i, dev in enumerate(top_developers, start=1):
+            lines.append(
+                f"{i}. {dev['name']} - {dev.get('job', '') or dev.get('skill', '')} "
+                f"- {dev.get('technologies', '')} "
+                f"(Views: {dev['views']}, Likes: {dev['likes']})"
+            )
+
+        return {
+            "reply": "\n".join(lines),
+            "keyword": ai_keyword,
+            "developers": top_developers
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
